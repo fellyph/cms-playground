@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { describe, it } from 'node:test';
-import { bootPhp } from '@cms-playground/core';
+import { bootPhp, packZip } from '@cms-playground/core';
 import { detectWordPressAutoMount, validateWpVersion, wordpressAdapter, wpDownloadUrl } from '../src/index.js';
 
 describe('@cms-playground/wordpress', () => {
@@ -130,6 +130,93 @@ describe('@cms-playground/wordpress', () => {
       assert.equal(serverVars.HTTP_HOST, 'example.test');
       assert.equal(serverVars.SERVER_NAME, 'example.test');
       assert.equal(serverVars.SERVER_PORT, '443');
+    } finally {
+      php.exit();
+    }
+  });
+
+  it('installs sqlite drop-in, preserves existing wp-config.php, and executes setSiteOption & activatePlugin steps', async () => {
+    const php = await bootPhp({ phpVersion: '8.4' });
+    const documentRoot = '/var/www/html';
+
+    try {
+      // Build a minimal sqlite-database-integration plugin zip
+      php.mkdir('/tmp/sqlite-plugin-src/sqlite-database-integration');
+      php.writeFile(
+        '/tmp/sqlite-plugin-src/sqlite-database-integration/db.copy',
+        '<?php // PATH={SQLITE_IMPLEMENTATION_FOLDER_PATH} PLUGIN={SQLITE_PLUGIN}'
+      );
+      const sqliteZipBytes = await packZip(php, '/tmp/sqlite-plugin-src');
+
+      // Pre-existing wp-config.php should not be overwritten
+      php.writeFile(`${documentRoot}/wp-config.php`, '<?php // custom-existing-config\n');
+      php.mkdir(`${documentRoot}/wp-admin/includes`);
+      php.writeFile(
+        `${documentRoot}/wp-load.php`,
+        `<?php
+        if (!defined('ABSPATH')) { define('ABSPATH', __DIR__ . '/'); }
+        function update_option($k, $v) {
+            file_put_contents('/tmp/wp-opt-result.json', json_encode([$k => $v]));
+        }
+        `
+      );
+      php.writeFile(
+        `${documentRoot}/wp-admin/includes/plugin.php`,
+        `<?php
+        class MockWpError {
+            public function __construct(private string $msg) {}
+            public function get_error_message(): string { return $this->msg; }
+        }
+        function is_wp_error($thing): bool { return $thing instanceof MockWpError; }
+        function activate_plugin($path) {
+            if ($path === 'broken/plugin.php') {
+                return new MockWpError('plugin activation failed');
+            }
+            file_put_contents('/tmp/wp-activated.txt', $path);
+            return null;
+        }
+        `
+      );
+
+      const info = await wordpressAdapter.configure({
+        php,
+        documentRoot,
+        url: 'http://127.0.0.1:8790',
+        password: 'pw',
+        site: '/tmp/local-wp-site',
+        bundle: { sqliteZipBytes },
+      });
+
+      assert.equal(info.username, 'admin');
+      assert.equal(info.password, '(unchanged)');
+      assert.equal(php.readFileAsText(`${documentRoot}/wp-config.php`), '<?php // custom-existing-config\n');
+
+      const dbDropIn = php.readFileAsText(`${documentRoot}/wp-content/db.php`);
+      assert.ok(dbDropIn.includes(`${documentRoot}/wp-content/plugins/sqlite-database-integration`));
+      assert.ok(dbDropIn.includes('sqlite-database-integration/load.php'));
+
+      // Blueprint step: setSiteOption
+      await wordpressAdapter.blueprintSteps.setSiteOption(
+        { option: 'blogname', value: 'My Playground' },
+        { php, documentRoot }
+      );
+      assert.deepEqual(JSON.parse(php.readFileAsText('/tmp/wp-opt-result.json')), { blogname: 'My Playground' });
+
+      // Blueprint step: activatePlugin (success + WP_Error)
+      await wordpressAdapter.blueprintSteps.activatePlugin(
+        { pluginPath: 'hello-dolly/hello.php' },
+        { php, documentRoot }
+      );
+      assert.equal(php.readFileAsText('/tmp/wp-activated.txt'), 'hello-dolly/hello.php');
+
+      await assert.rejects(
+        () =>
+          wordpressAdapter.blueprintSteps.activatePlugin(
+            { pluginPath: 'broken/plugin.php' },
+            { php, documentRoot }
+          ),
+        /plugin activation failed/
+      );
     } finally {
       php.exit();
     }

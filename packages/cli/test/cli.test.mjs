@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, it } from 'node:test';
-import { parseCliArgs } from '../src/cli.js';
+import { HELP_TEXT, parseCliArgs, run } from '../src/cli.js';
 
 describe('@cms-playground/cli parseCliArgs', () => {
   it('parses start --joomla with defaults', () => {
@@ -102,6 +105,67 @@ describe('@cms-playground/cli parseCliArgs', () => {
   it('rejects empty inline option values', () => {
     for (const flag of ['--port=', '--php=', '--host=', '--site=', '--blueprint=', '--output=', '--mount=', '--verbosity=']) {
       assert.throws(() => parseCliArgs(['start', '--joomla', flag]), /requires a value/, `Expected ${flag} to throw`);
+    }
+  });
+});
+
+describe('@cms-playground/cli run() command dispatch', () => {
+  async function captureLogs(fn) {
+    const lines = [];
+    const origLog = console.log;
+    console.log = (...args) => lines.push(args.join(' '));
+    try {
+      const result = await fn();
+      return { result, output: lines.join('\n') };
+    } finally {
+      console.log = origLog;
+    }
+  }
+
+  it('prints HELP_TEXT for --help, -h, and empty argv', async () => {
+    for (const argv of [['--help'], ['-h'], []]) {
+      const { result, output } = await captureLogs(() => run(argv));
+      assert.equal(result, 0);
+      assert.equal(output, HELP_TEXT);
+    }
+  });
+
+  it('lists registered CMS adapters for list command', async () => {
+    const { result, output } = await captureLogs(() => run(['list']));
+    assert.equal(result, 0);
+    assert.match(output, /--joomla/);
+    assert.match(output, /--wp/);
+    assert.match(output, /PHP:/);
+  });
+
+  it('rejects missing CMS flag, unknown commands, and missing required command options', async () => {
+    await assert.rejects(() => run(['start']), /Missing CMS flag/);
+    await assert.rejects(() => run(['bogus', '--joomla']), /Unknown command "bogus"/);
+    await assert.rejects(() => run(['run-blueprint', '--joomla']), /--blueprint/);
+    await assert.rejects(() => run(['build-snapshot', '--wp']), /--output/);
+    await assert.rejects(() => run(['cli', '--wp']), /does not define a CLI entrypoint/);
+  });
+
+  it('dispatches run-blueprint against a local --site and respects --quiet', async () => {
+    const workDir = mkdtempSync(join(tmpdir(), 'cms-pg-cli-run-'));
+    try {
+      writeFileSync(join(workDir, 'wp-config.php'), "<?php\ndefine('WP_DEBUG', false);\n");
+      const bpPath = join(workDir, 'bp.json');
+      writeFileSync(
+        bpPath,
+        JSON.stringify({
+          steps: [{ step: 'writeFile', path: 'created.txt', data: 'via-cli-run' }],
+        })
+      );
+
+      const { result, output } = await captureLogs(() =>
+        run(['run-blueprint', '--wp', `--site=${workDir}`, `--blueprint=${bpPath}`, '--quiet'])
+      );
+      assert.equal(result, 0);
+      assert.equal(output, '');
+      assert.equal(readFileSync(join(workDir, 'created.txt'), 'utf8'), 'via-cli-run');
+    } finally {
+      rmSync(workDir, { recursive: true, force: true });
     }
   });
 });
