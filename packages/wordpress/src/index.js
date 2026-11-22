@@ -6,13 +6,30 @@ import { basename, join, resolve } from 'node:path';
 import { DOCUMENT_ROOT, fetchCachedBytes, runPhpCode, unpackZip } from '@cms-playground/core';
 
 const WP_SQLITE_PLUGIN_URL = 'https://downloads.wordpress.org/plugin/sqlite-database-integration.latest-stable.zip';
+const WP_VERSION_RE = /^(latest|default|[0-9]+(\.[0-9]+)*(-[a-zA-Z0-9.]+)?)$/;
+
+export function validateWpVersion(version) {
+  if (!version || version === 'latest' || version === 'default') {
+    return 'latest';
+  }
+
+  const normalized = String(version);
+
+  if (!WP_VERSION_RE.test(normalized)) {
+    throw new Error(`Invalid WordPress version "${version}". Expected "latest" or a version number like "6.7.2".`);
+  }
+
+  return normalized;
+}
 
 export function wpDownloadUrl(version) {
-  if (!version || version === 'latest' || version === 'default') {
+  const resolved = validateWpVersion(version);
+
+  if (resolved === 'latest') {
     return 'https://wordpress.org/latest.zip';
   }
 
-  return `https://wordpress.org/wordpress-${version}.zip`;
+  return `https://wordpress.org/wordpress-${resolved}.zip`;
 }
 
 const blueprintSteps = {
@@ -29,7 +46,14 @@ const blueprintSteps = {
       foreach ($consts as $name => $value) {
           $snippet .= "if (!defined(" . var_export($name, true) . ")) { define(" . var_export($name, true) . ", " . var_export($value, true) . "); }\\n";
       }
-      $content = preg_replace('/<\\?php\\s*/', "<?php\\n" . $snippet, $content, 1);
+      $content = preg_replace_callback(
+          '/<\\?php\\s*/',
+          function () use ($snippet) {
+              return "<?php\\n" . $snippet;
+          },
+          $content,
+          1
+      );
       file_put_contents($file, $content);
       `
     );
@@ -75,7 +99,7 @@ export const wordpressAdapter = {
   blueprintSteps,
 
   async resolveBundle({ version, cacheDir, log }) {
-    const resolvedVersion = !version || version === 'default' ? 'latest' : String(version);
+    const resolvedVersion = validateWpVersion(version);
     const wpZipUrl = wpDownloadUrl(resolvedVersion);
     const wpZipPath = join(cacheDir, `wordpress-${resolvedVersion}.zip`);
     const sqliteZipPath = join(cacheDir, 'sqlite-database-integration.zip');

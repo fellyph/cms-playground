@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
+import { bootPhp } from '@cms-playground/core';
 import { detectJoomlaAutoMount, joomlaAdapter, matchJoomlaVersion } from '../src/index.js';
 
 describe('@cms-playground/joomla', () => {
@@ -24,6 +25,80 @@ describe('@cms-playground/joomla', () => {
     assert.deepEqual(joomlaAdapter.getFileNotFoundAction('/about-us'), { type: 'internal-redirect', uri: '/index.php' });
     assert.deepEqual(joomlaAdapter.getFileNotFoundAction('/administrator/missing'), { type: '404' });
     assert.deepEqual(joomlaAdapter.getFileNotFoundAction('/api/missing'), { type: '404' });
+  });
+
+  it('hardens serveStatic against traversal, bad versions, and directory EISDIR', async () => {
+    const cacheDir = mkdtempSync(join(tmpdir(), 'cms-pg-joomla-static-'));
+
+    try {
+      mkdirSync(join(cacheDir, '6.2.0', 'media', 'system'), { recursive: true });
+      writeFileSync(join(cacheDir, 'secret.txt'), 'do-not-read');
+      writeFileSync(join(cacheDir, '6.2.0', 'media', 'system', 'app.css'), 'body{}');
+
+      const bundle = { version: '6.2.0', mediaBaseUrl: 'http://127.0.0.1:1/joomla/6.2.0/' };
+
+      // Traversal attempts (backslash, URL-encoded .., invalid bundle.version)
+      assert.equal(
+        await joomlaAdapter.serveStatic({ request: { url: '/media/..\\..\\secret.txt' }, bundle, cacheDir }),
+        null
+      );
+      assert.equal(
+        await joomlaAdapter.serveStatic({ request: { url: '/media/%2e%2e/%2e%2e/secret.txt' }, bundle, cacheDir }),
+        null
+      );
+      assert.equal(
+        await joomlaAdapter.serveStatic({
+          request: { url: '/media/system/app.css' },
+          bundle: { version: '../evil', mediaBaseUrl: bundle.mediaBaseUrl },
+          cacheDir,
+        }),
+        null
+      );
+
+      // Existing directory should return null instead of throwing EISDIR
+      assert.equal(
+        await joomlaAdapter.serveStatic({ request: { url: '/media/system' }, bundle, cacheDir }),
+        null
+      );
+      assert.equal(
+        await joomlaAdapter.serveStatic({ request: { url: '/media/system/' }, bundle, cacheDir }),
+        null
+      );
+
+      // Valid cached file is served properly
+      const hit = await joomlaAdapter.serveStatic({ request: { url: '/media/system/app.css' }, bundle, cacheDir });
+      assert.equal(hit.status, 200);
+      assert.equal(Buffer.from(hit.body).toString('utf8'), 'body{}');
+    } finally {
+      rmSync(cacheDir, { recursive: true, force: true });
+    }
+  });
+
+  it('preserves backreference characters and validates keys in setGlobalConfig', async () => {
+    const php = await bootPhp({ phpVersion: '8.4' });
+    const documentRoot = '/var/www/html';
+
+    try {
+      php.writeFile(
+        `${documentRoot}/configuration.php`,
+        "<?php\nclass JConfig {\n\tpublic $sitename = 'Old';\n}\n"
+      );
+
+      await joomlaAdapter.blueprintSteps.setGlobalConfig(
+        { values: { sitename: 'Price $0 / $1 \\\\1' } },
+        { php, documentRoot }
+      );
+
+      const updated = php.readFileAsText(`${documentRoot}/configuration.php`);
+      assert.ok(updated.includes("public $sitename = 'Price $0 / $1 \\\\\\\\1';"), `Unexpected config: ${updated}`);
+
+      await assert.rejects(
+        () => joomlaAdapter.blueprintSteps.setGlobalConfig({ values: { 'bad;key': 'x' } }, { php, documentRoot }),
+        /Invalid Joomla configuration key/
+      );
+    } finally {
+      php.exit();
+    }
   });
 
   it('detects Joomla plugin, module, and component manifests for --auto-mount', () => {

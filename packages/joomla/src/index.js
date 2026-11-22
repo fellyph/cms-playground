@@ -1,8 +1,9 @@
 // Joomla adapter for @cms-playground.
 // Reuses the pre-installed SQLite bundles published by joomla-projects/joomla-playground.
 
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { basename, dirname, extname, join, resolve } from 'node:path';
+import { randomBytes } from 'node:crypto';
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
+import { basename, dirname, extname, join, resolve, sep } from 'node:path';
 import { DOCUMENT_ROOT, fetchCachedBytes, runPhpCode } from '@cms-playground/core';
 
 const DEFAULT_PLAYGROUND_URL = 'https://joomla-projects.github.io/joomla-playground/';
@@ -66,9 +67,15 @@ const blueprintSteps = {
       $file = ${JSON.stringify(context.documentRoot)} . '/configuration.php';
       $config = file_get_contents($file);
       foreach ($values as $key => $value) {
-          $config = preg_replace(
+          if (!is_string($key) || !preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $key)) {
+              throw new RuntimeException('Invalid Joomla configuration key: ' . (string) $key);
+          }
+          $replacement = 'public $' . $key . ' = ' . var_export($value, true) . ';';
+          $config = preg_replace_callback(
               '/public \\$' . preg_quote($key, '/') . ' = [^;]*;/',
-              'public $' . $key . ' = ' . var_export($value, true) . ';',
+              function () use ($replacement) {
+                  return $replacement;
+              },
               $config
           );
       }
@@ -161,7 +168,14 @@ export const joomlaAdapter = {
       ];
       $config = file_get_contents($file);
       foreach ($values as $key => $value) {
-          $config = preg_replace('/public \\$' . $key . ' = [^;]*;/', 'public $' . $key . ' = ' . var_export($value, true) . ';', $config);
+          $replacement = 'public $' . $key . ' = ' . var_export($value, true) . ';';
+          $config = preg_replace_callback(
+              '/public \\$' . preg_quote($key, '/') . ' = [^;]*;/',
+              function () use ($replacement) {
+                  return $replacement;
+              },
+              $config
+          );
       }
       chmod($file, 0644);
       file_put_contents($file, $config);
@@ -189,27 +203,48 @@ export const joomlaAdapter = {
    * Returns null if not found so the request falls back to PHP-WASM (e.g. extension-installed media).
    */
   async serveStatic({ request, bundle, cacheDir }) {
-    if (!bundle?.mediaBaseUrl) {
+    if (!bundle?.mediaBaseUrl || typeof bundle.version !== 'string' || !/^[0-9A-Za-z._-]+$/.test(bundle.version) || bundle.version === '.' || bundle.version === '..') {
       return null;
     }
 
     const parsed = new URL(request.url, 'http://localhost');
+    let decodedPathname;
 
-    if (!parsed.pathname.startsWith('/media/')) {
+    try {
+      decodedPathname = decodeURIComponent(parsed.pathname);
+    } catch {
       return null;
     }
 
-    const relPath = parsed.pathname.replace(/^\/+/, '');
-
-    if (relPath.split('/').includes('..')) {
+    if (!decodedPathname.startsWith('/media/') || decodedPathname.includes('\0') || decodedPathname.includes('\\')) {
       return null;
     }
 
-    const cachedFile = join(cacheDir, bundle.version, relPath);
+    const relPath = decodedPathname.replace(/^\/+/, '');
+
+    if (!relPath || relPath.endsWith('/') || relPath.split('/').includes('..')) {
+      return null;
+    }
+
+    const versionDir = resolve(cacheDir, bundle.version);
+    const cachedFile = resolve(versionDir, relPath);
+
+    if (!cachedFile.startsWith(versionDir + sep)) {
+      return null;
+    }
+
     const contentType = MIME_TYPES[extname(relPath).toLowerCase()] ?? 'application/octet-stream';
 
-    if (existsSync(cachedFile)) {
-      return { status: 200, headers: { 'content-type': contentType }, body: new Uint8Array(readFileSync(cachedFile)) };
+    try {
+      if (statSync(cachedFile).isFile()) {
+        return { status: 200, headers: { 'content-type': contentType }, body: new Uint8Array(readFileSync(cachedFile)) };
+      }
+
+      return null;
+    } catch (error) {
+      if (error.code !== 'ENOENT') {
+        throw error;
+      }
     }
 
     const remoteUrl = new URL(relPath, bundle.mediaBaseUrl).href;
@@ -221,7 +256,19 @@ export const joomlaAdapter = {
 
     const body = new Uint8Array(await response.arrayBuffer());
     mkdirSync(dirname(cachedFile), { recursive: true });
-    writeFileSync(cachedFile, body);
+    const tmpFile = `${cachedFile}.${process.pid}.${randomBytes(4).toString('hex')}.tmp`;
+
+    try {
+      writeFileSync(tmpFile, body);
+      renameSync(tmpFile, cachedFile);
+    } catch (error) {
+      try {
+        unlinkSync(tmpFile);
+      } catch {
+        // Ignore temp-file cleanup errors.
+      }
+      throw error;
+    }
 
     return {
       status: 200,
