@@ -93,6 +93,45 @@ export async function unpackZip(php, zipBytes, targetDir = DOCUMENT_ROOT) {
 }
 
 /**
+ * Packs a directory inside PHP's virtual filesystem into a zip archive (Uint8Array).
+ */
+export async function packZip(php, sourceDir = DOCUMENT_ROOT) {
+  const tmpPath = `/tmp/snapshot-${process.pid}-${Date.now()}.zip`;
+
+  try {
+    await runPhpCode(
+      php,
+      `
+      $root = rtrim(${JSON.stringify(sourceDir)}, '/');
+      $zip = new ZipArchive();
+      if ($zip->open(${JSON.stringify(tmpPath)}, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
+          throw new RuntimeException('Cannot create snapshot zip archive');
+      }
+      $it = new RecursiveIteratorIterator(
+          new RecursiveDirectoryIterator($root, RecursiveDirectoryIterator::SKIP_DOTS),
+          RecursiveIteratorIterator::SELF_FIRST
+      );
+      foreach ($it as $item) {
+          $rel = substr($item->getPathname(), strlen($root) + 1);
+          if ($item->isDir()) {
+              $zip->addEmptyDir($rel);
+          } else {
+              $zip->addFile($item->getPathname(), $rel);
+          }
+      }
+      $zip->close();
+      `
+    );
+
+    return php.readFileAsBuffer(tmpPath);
+  } finally {
+    if (php.fileExists(tmpPath)) {
+      php.unlink(tmpPath);
+    }
+  }
+}
+
+/**
  * Mounts host directories into the PHP virtual filesystem.
  * Each mount entry is { hostPath, vfsPath }.
  */

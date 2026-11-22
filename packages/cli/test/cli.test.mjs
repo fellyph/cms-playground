@@ -54,6 +54,43 @@ describe('@cms-playground/cli parseCliArgs', () => {
     assert.equal(parsed.options.mounts[1].vfsPath, '/var/www/html/plugins/system/b');
   });
 
+  it('parses --auto-mount with and without an explicit directory', () => {
+    const cwdMount = parseCliArgs(['start', '--joomla', '--auto-mount']);
+    const dirMount = parseCliArgs(['start', '--wp', '--auto-mount=./my-plugin']);
+
+    assert.equal(cwdMount.options.autoMount, true);
+    assert.equal(dirMount.options.autoMount, './my-plugin');
+  });
+
+  it('parses run-blueprint and build-snapshot with --mount-before-install and --verbosity', () => {
+    const bp = parseCliArgs([
+      'run-blueprint',
+      '--joomla=6.2',
+      '--blueprint=./bp.json',
+      '--mount-before-install=./overlay:/var/www/html/overlay',
+      '--verbosity=debug',
+    ]);
+
+    assert.equal(bp.command, 'run-blueprint');
+    assert.equal(bp.cms, 'joomla');
+    assert.equal(bp.cmsVersion, '6.2');
+    assert.equal(bp.options.blueprint, './bp.json');
+    assert.equal(bp.options.mountsBeforeInstall.length, 1);
+    assert.equal(bp.options.mountsBeforeInstall[0].vfsPath, '/var/www/html/overlay');
+    assert.equal(bp.options.verbosity, 'debug');
+    assert.equal(bp.options.quiet, false);
+
+    const snap = parseCliArgs(['build-snapshot', '--wp', '--output=./out.zip', '--verbosity=quiet']);
+    assert.equal(snap.command, 'build-snapshot');
+    assert.equal(snap.cms, 'wp');
+    assert.equal(snap.options.output, './out.zip');
+    assert.equal(snap.options.quiet, true);
+  });
+
+  it('rejects invalid verbosity', () => {
+    assert.throws(() => parseCliArgs(['start', '--joomla', '--verbosity=loud']), /Invalid verbosity/);
+  });
+
   it('rejects multiple CMS flags', () => {
     assert.throws(() => parseCliArgs(['start', '--joomla', '--wp']), /Multiple CMS flags/);
   });

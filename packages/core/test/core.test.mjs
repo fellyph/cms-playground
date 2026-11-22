@@ -1,6 +1,17 @@
 import assert from 'node:assert/strict';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, it } from 'node:test';
-import { getAdapter, listAdapters, parseMountSpec, registerAdapter, startPlayground } from '../src/index.js';
+import {
+  buildSnapshot,
+  getAdapter,
+  listAdapters,
+  parseMountSpec,
+  registerAdapter,
+  runBlueprintHeadless,
+  startPlayground,
+} from '../src/index.js';
 
 describe('@cms-playground/core', () => {
   it('registers and resolves adapters by name and alias', () => {
@@ -70,6 +81,73 @@ describe('@cms-playground/core', () => {
       assert.equal(data.sqlite, true);
     } finally {
       await instance.close();
+    }
+  });
+
+  it('runs a blueprint headlessly and builds a zip snapshot with mountsBeforeInstall', async () => {
+    const workDir = mkdtempSync(join(tmpdir(), 'cms-pg-test-'));
+    const preMountDir = join(workDir, 'pre');
+    const bpPath = join(workDir, 'blueprint.json');
+    const snapPath = join(workDir, 'out.zip');
+
+    try {
+      const { mkdirSync } = await import('node:fs');
+      mkdirSync(preMountDir, { recursive: true });
+      writeFileSync(join(preMountDir, 'flag.txt'), 'pre-install-ok');
+      writeFileSync(
+        bpPath,
+        JSON.stringify({
+          steps: [
+            { step: 'writeFile', path: 'hello.txt', data: 'from-blueprint' },
+            { step: 'runPHP', code: 'file_put_contents("generated.txt", file_get_contents("hello.txt") . ":php");' },
+          ],
+        })
+      );
+
+      let sawPreMountDuringConfigure = false;
+      const testAdapter = {
+        name: 'test-snap',
+        label: 'Test Snap',
+        defaultPhp: '8.4',
+        supportedPhp: ['8.4'],
+        defaultVersion: '1.0',
+        adminPath: '/',
+        async resolveBundle() {
+          return { version: '1.0' };
+        },
+        async configure({ php, documentRoot }) {
+          sawPreMountDuringConfigure = php.fileExists(`${documentRoot}/pre/flag.txt`);
+          php.writeFile(`${documentRoot}/index.php`, '<?php echo "ok";');
+        },
+        getFileNotFoundAction() {
+          return { type: '404' };
+        },
+      };
+
+      const bpResult = await runBlueprintHeadless({
+        adapter: testAdapter,
+        blueprintSource: bpPath,
+        mountsBeforeInstall: [{ hostPath: preMountDir, vfsPath: '/var/www/html/pre' }],
+        quiet: true,
+      });
+
+      assert.equal(sawPreMountDuringConfigure, true);
+      assert.equal(bpResult.stepsRun, 2);
+
+      const snapResult = await buildSnapshot({
+        adapter: testAdapter,
+        blueprintSource: bpPath,
+        outputPath: snapPath,
+        quiet: true,
+      });
+
+      assert.equal(existsSync(snapPath), true);
+      assert.ok(snapResult.bytes > 0);
+      // Zip magic bytes PK\x03\x04
+      const magic = readFileSync(snapPath).subarray(0, 4);
+      assert.deepEqual(Array.from(magic), [0x50, 0x4b, 0x03, 0x04]);
+    } finally {
+      rmSync(workDir, { recursive: true, force: true });
     }
   });
 });

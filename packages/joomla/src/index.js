@@ -1,9 +1,9 @@
 // Joomla adapter for @cms-playground.
 // Reuses the pre-installed SQLite bundles published by joomla-projects/joomla-playground.
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, extname, join } from 'node:path';
-import { fetchCachedBytes, runPhpCode } from '@cms-playground/core';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { basename, dirname, extname, join, resolve } from 'node:path';
+import { DOCUMENT_ROOT, fetchCachedBytes, runPhpCode } from '@cms-playground/core';
 
 const DEFAULT_PLAYGROUND_URL = 'https://joomla-projects.github.io/joomla-playground/';
 
@@ -229,4 +229,85 @@ export const joomlaAdapter = {
       body,
     };
   },
+
+  detectAutoMount(dir) {
+    return detectJoomlaAutoMount(dir);
+  },
 };
+
+/**
+ * Inspects a host directory for a Joomla extension XML manifest and returns mount + postMount discovery instructions.
+ * Supports plugin, module, template, and component extensions.
+ */
+export function detectJoomlaAutoMount(dir) {
+  const absDir = resolve(dir);
+
+  if (!existsSync(absDir)) {
+    return null;
+  }
+
+  const xmlFiles = readdirSync(absDir).filter((name) => name.toLowerCase().endsWith('.xml'));
+
+  for (const xmlFile of xmlFiles) {
+    const content = readFileSync(join(absDir, xmlFile), 'utf8');
+    const extMatch = content.match(/<extension\b([^>]*)>/i);
+
+    if (!extMatch) {
+      continue;
+    }
+
+    const attrs = extMatch[1];
+    const type = attrs.match(/\btype\s*=\s*["']([^"']+)["']/i)?.[1]?.toLowerCase();
+    const group = attrs.match(/\bgroup\s*=\s*["']([^"']+)["']/i)?.[1]?.toLowerCase() ?? 'system';
+    const client = attrs.match(/\bclient\s*=\s*["']([^"']+)["']/i)?.[1]?.toLowerCase() ?? 'site';
+
+    if (!['plugin', 'module', 'template', 'component'].includes(type)) {
+      continue;
+    }
+
+    const fallbackElement = basename(xmlFile, extname(xmlFile)).toLowerCase();
+    let element = fallbackElement;
+
+    if (type === 'plugin') {
+      element = content.match(/<filename\b[^>]*\bplugin\s*=\s*["']([^"']+)["']/i)?.[1]?.toLowerCase() ?? fallbackElement;
+    } else if (type === 'module') {
+      element = content.match(/<filename\b[^>]*\bmodule\s*=\s*["']([^"']+)["']/i)?.[1]?.toLowerCase() ?? fallbackElement;
+      if (!element.startsWith('mod_')) {
+        element = `mod_${element}`;
+      }
+    } else if (type === 'component') {
+      const nameTag = content.match(/<name>\s*([^<]+?)\s*<\/name>/i)?.[1]?.toLowerCase();
+      element = nameTag || fallbackElement;
+      if (!element.startsWith('com_')) {
+        element = `com_${element}`;
+      }
+    } else if (type === 'template') {
+      element = content.match(/<name>\s*([^<]+?)\s*<\/name>/i)?.[1]?.toLowerCase() ?? fallbackElement;
+    }
+
+    const adminPrefix = client === 'administrator' ? '/administrator' : '';
+    let vfsPath;
+
+    if (type === 'plugin') {
+      vfsPath = `${DOCUMENT_ROOT}/plugins/${group}/${element}`;
+    } else if (type === 'module') {
+      vfsPath = `${DOCUMENT_ROOT}${adminPrefix}/modules/${element}`;
+    } else if (type === 'template') {
+      vfsPath = `${DOCUMENT_ROOT}${adminPrefix}/templates/${element}`;
+    } else {
+      vfsPath = `${DOCUMENT_ROOT}/components/${element}`;
+    }
+
+    return {
+      kind: `joomla-${type}`,
+      element,
+      mounts: [{ hostPath: absDir, vfsPath }],
+      async postMount({ php, documentRoot, log }) {
+        log?.(`Discovering and installing Joomla ${type} "${element}"...`);
+        await php.cli(['php', `${documentRoot}/cli/joomla.php`, 'extension:discover:install']);
+      },
+    };
+  }
+
+  return null;
+}
