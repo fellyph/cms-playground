@@ -63,7 +63,7 @@ describe('Documentation verification', () => {
   });
 
   it('all CLI example commands in README.md and docs/*.md parse cleanly with parseCliArgs()', () => {
-    const validCommands = new Set(['start', 'run-blueprint', 'build-snapshot', 'cli', 'list']);
+    const validCommands = new Set(['start', 'run-blueprint', 'build-snapshot', 'cli', 'list', 'setup']);
     let checked = 0;
 
     for (const file of DOC_FILES) {
@@ -92,7 +92,7 @@ describe('Documentation verification', () => {
             `Unknown documented command "${parsed.command}" in ${file}: "${line}"`
           );
 
-          if (parsed.command !== 'list') {
+          if (parsed.command !== 'list' && parsed.command !== 'setup') {
             assert.ok(
               parsed.cms,
               `Documented "${parsed.command}" command missing CMS flag in ${file}: "${line}"`

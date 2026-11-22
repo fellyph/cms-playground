@@ -128,6 +128,7 @@ npx cms-playground cli --joomla --site=./my-joomla-site -- cache:clean
 | `run-blueprint` | Run a Blueprint headlessly without starting an HTTP server |
 | `build-snapshot` | Boot a CMS, optionally run a Blueprint, and export a `.zip` snapshot |
 | `cli` | Run the CMS's native CLI (e.g. `cli/joomla.php`) in PHP-WASM |
+| `setup agent` | Install the bundled Agent Skill and configure MCP for supported coding agents |
 | `list` | Show registered CMS adapters and supported PHP versions |
 
 | Flag | Default | Description |
@@ -146,6 +147,23 @@ npx cms-playground cli --joomla --site=./my-joomla-site -- cache:clean
 | `--verbosity=<level>` | `normal` | Logging level: `quiet`, `normal`, or `debug` |
 | `--quiet` | `false` | Alias for `--verbosity=quiet` |
 | `-h`, `--help` | — | Show CLI help text |
+
+---
+
+## Coding Agent Setup
+
+Install the bundled `cms-playground` Agent Skill and configure MCP for detected coding agents (Claude Code, Cursor, Codex, VS Code, Antigravity, or generic `.mcp.json`):
+
+```bash
+# Preview changes without writing files
+npx cms-playground setup agent --dry-run
+
+# Auto-detect clients and install into the current project
+npx cms-playground setup agent -y --project
+
+# Install skill only for a specific client
+npx cms-playground setup agent --agent cursor --skip-mcp
+```
 
 ---
 

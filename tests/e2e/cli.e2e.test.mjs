@@ -454,3 +454,40 @@ describe('CLI E2E: error handling', () => {
     }
   });
 });
+
+describe('CLI E2E: setup agent', () => {
+  it('supports --dry-run and installs bundled skill + project MCP config with -y --project', async () => {
+    const tmp = createTempDir('e2e-setup-agent-');
+    try {
+      const homeDir = join(tmp.dir, 'home');
+      const projectDir = join(tmp.dir, 'project');
+      mkdirSync(join(homeDir, '.claude'), { recursive: true });
+      mkdirSync(projectDir, { recursive: true });
+
+      const dryRun = await runCliProcess(['setup', 'agent', '--project', '--dry-run'], {
+        cwd: projectDir,
+        env: { HOME: homeDir },
+      });
+
+      assert.equal(dryRun.exitCode, 0, dryRun.stderr);
+      assert.match(dryRun.stdout, /\[dry-run\]/);
+      assert.equal(existsSync(join(projectDir, '.mcp.json')), false);
+
+      const applied = await runCliProcess(['setup', 'agent', '-y', '--project'], {
+        cwd: projectDir,
+        env: { HOME: homeDir },
+      });
+
+      assert.equal(applied.exitCode, 0, applied.stderr);
+      assert.equal(existsSync(join(projectDir, '.claude', 'skills', 'cms-playground', 'SKILL.md')), true);
+
+      const mcp = JSON.parse(readFileSync(join(projectDir, '.mcp.json'), 'utf8'));
+      assert.deepEqual(mcp.mcpServers['cms-playground'], {
+        command: 'npx',
+        args: ['-y', '@cms-playground/cli', 'mcp'],
+      });
+    } finally {
+      tmp.cleanup();
+    }
+  });
+});
