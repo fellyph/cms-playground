@@ -1,8 +1,9 @@
 // WordPress adapter for @cms-playground.
 // Downloads official WordPress + WordPress/sqlite-database-integration and installs on SQLite inside PHP-WASM.
 
-import { join } from 'node:path';
-import { fetchCachedBytes, runPhpCode, unpackZip } from '@cms-playground/core';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { basename, join, resolve } from 'node:path';
+import { DOCUMENT_ROOT, fetchCachedBytes, runPhpCode, unpackZip } from '@cms-playground/core';
 
 const WP_SQLITE_PLUGIN_URL = 'https://downloads.wordpress.org/plugin/sqlite-database-integration.latest-stable.zip';
 
@@ -193,4 +194,90 @@ require_once ABSPATH . 'wp-settings.php';
 
     return { type: 'internal-redirect', uri: '/index.php' };
   },
+
+  detectAutoMount(dir) {
+    return detectWordPressAutoMount(dir);
+  },
 };
+
+/**
+ * Inspects a host directory for a WordPress theme (style.css), plugin (Plugin Name header),
+ * or wp-content directory and returns mount + postMount activation instructions.
+ */
+export function detectWordPressAutoMount(dir) {
+  const absDir = resolve(dir);
+
+  if (!existsSync(absDir)) {
+    return null;
+  }
+
+  const slug = basename(absDir);
+
+  // 1. WordPress Theme: style.css with "Theme Name:" header
+  const styleCss = join(absDir, 'style.css');
+
+  if (existsSync(styleCss)) {
+    const header = readFileSync(styleCss, 'utf8').slice(0, 8192);
+
+    if (/^\s*(?:\*\s*)?Theme Name\s*:/im.test(header)) {
+      return {
+        kind: 'wp-theme',
+        slug,
+        mounts: [{ hostPath: absDir, vfsPath: `${DOCUMENT_ROOT}/wp-content/themes/${slug}` }],
+        async postMount({ php, documentRoot, log }) {
+          log?.(`Switching WordPress theme to "${slug}"...`);
+          await runPhpCode(
+            php,
+            `
+            require_once ${JSON.stringify(documentRoot)} . '/wp-load.php';
+            switch_theme(${JSON.stringify(slug)});
+            `
+          );
+        },
+      };
+    }
+  }
+
+  // 2. WordPress Plugin: top-level .php file with "Plugin Name:" header
+  const phpFiles = readdirSync(absDir).filter((name) => name.toLowerCase().endsWith('.php'));
+
+  for (const phpFile of phpFiles) {
+    const header = readFileSync(join(absDir, phpFile), 'utf8').slice(0, 8192);
+
+    if (/^\s*(?:\*\s*)?Plugin Name\s*:/im.test(header)) {
+      const pluginPath = `${slug}/${phpFile}`;
+
+      return {
+        kind: 'wp-plugin',
+        slug,
+        pluginFile: phpFile,
+        mounts: [{ hostPath: absDir, vfsPath: `${DOCUMENT_ROOT}/wp-content/plugins/${slug}` }],
+        async postMount({ php, documentRoot, log }) {
+          log?.(`Activating WordPress plugin "${pluginPath}"...`);
+          await runPhpCode(
+            php,
+            `
+            require_once ${JSON.stringify(documentRoot)} . '/wp-load.php';
+            require_once ABSPATH . 'wp-admin/includes/plugin.php';
+            $result = activate_plugin(${JSON.stringify(pluginPath)});
+            if (is_wp_error($result)) {
+                throw new RuntimeException($result->get_error_message());
+            }
+            `
+          );
+        },
+      };
+    }
+  }
+
+  // 3. wp-content directory (contains plugins/ or themes/)
+  if (existsSync(join(absDir, 'plugins')) || existsSync(join(absDir, 'themes'))) {
+    return {
+      kind: 'wp-content',
+      slug,
+      mounts: [{ hostPath: absDir, vfsPath: `${DOCUMENT_ROOT}/wp-content` }],
+    };
+  }
+
+  return null;
+}

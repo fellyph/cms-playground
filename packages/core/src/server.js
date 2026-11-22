@@ -30,6 +30,7 @@ async function bootSite({
   site = null,
   mountsBeforeInstall = [],
   mounts = [],
+  autoMount = null,
   blueprintSource = null,
   verbosity = 'normal',
   quiet = false,
@@ -64,6 +65,23 @@ async function bootSite({
   }
 
   const password = randomPassword();
+
+  let detectedAutoMount = null;
+
+  if (autoMount) {
+    if (typeof adapter.detectAutoMount !== 'function') {
+      throw new Error(`${adapter.label} adapter does not support --auto-mount`);
+    }
+
+    const targetDir = typeof autoMount === 'string' ? resolve(autoMount) : process.cwd();
+    detectedAutoMount = await adapter.detectAutoMount(targetDir);
+
+    if (!detectedAutoMount) {
+      throw new Error(`Could not detect a ${adapter.label} extension/plugin/theme in ${targetDir}`);
+    }
+
+    statusLog(`Auto-mount detected ${detectedAutoMount.kind} in ${targetDir}`);
+  }
 
   statusLog(`Booting PHP ${effectivePhp} (WebAssembly)...`);
   const php = await bootPhp({ phpVersion: String(effectivePhp) });
@@ -107,9 +125,15 @@ async function bootSite({
     log: statusLog,
   })) ?? {};
 
-  if (mounts.length > 0) {
-    debugLog(`Mounting ${mounts.length} director${mounts.length === 1 ? 'y' : 'ies'}...`);
-    await mountDirectories(php, mounts);
+  const postInstallMounts = [...(detectedAutoMount?.mounts ?? []), ...mounts];
+
+  if (postInstallMounts.length > 0) {
+    debugLog(`Mounting ${postInstallMounts.length} director${postInstallMounts.length === 1 ? 'y' : 'ies'}...`);
+    await mountDirectories(php, postInstallMounts);
+  }
+
+  if (typeof detectedAutoMount?.postMount === 'function') {
+    await detectedAutoMount.postMount({ php, documentRoot: DOCUMENT_ROOT, url, log: statusLog });
   }
 
   const handler = new PHPRequestHandler({
@@ -162,6 +186,7 @@ export async function startPlayground({
   site = null,
   mountsBeforeInstall = [],
   mounts = [],
+  autoMount = null,
   blueprintSource = null,
   verbosity = 'normal',
   quiet = false,
@@ -186,6 +211,7 @@ export async function startPlayground({
     site,
     mountsBeforeInstall,
     mounts,
+    autoMount,
     blueprintSource,
     verbosity,
     quiet,
@@ -297,6 +323,7 @@ export async function runBlueprintHeadless({
   site = null,
   mountsBeforeInstall = [],
   mounts = [],
+  autoMount = null,
   verbosity = 'normal',
   quiet = false,
   log = (msg) => console.log(msg),
@@ -312,6 +339,7 @@ export async function runBlueprintHeadless({
     site,
     mountsBeforeInstall,
     mounts,
+    autoMount,
     blueprintSource,
     verbosity,
     quiet,
@@ -343,6 +371,7 @@ export async function buildSnapshot({
   site = null,
   mountsBeforeInstall = [],
   mounts = [],
+  autoMount = null,
   verbosity = 'normal',
   quiet = false,
   log = (msg) => console.log(msg),
@@ -358,6 +387,7 @@ export async function buildSnapshot({
     site,
     mountsBeforeInstall,
     mounts,
+    autoMount,
     blueprintSource,
     verbosity,
     quiet,
