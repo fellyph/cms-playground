@@ -6,10 +6,14 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
-  test:
-    name: Test (Node ${{ matrix.node }}, ${{ matrix.os }})
+  unit:
+    name: Unit Tests (Node ${{ matrix.node }}, ${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
@@ -25,14 +29,50 @@ jobs:
           cache: npm
 
       - run: npm ci
-      - run: npm test
-      - run: npm run test:e2e:cli
+      - run: npm run test:unit
       - run: node packages/cli/bin/cms-playground.mjs list
+
+  docs:
+    name: Docs Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+      - run: npm run test:docs
+
+  e2e-cli:
+    name: E2E (cli, ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+      - run: npm run test:e2e:cli
 
   e2e:
     name: E2E (${{ matrix.cms }})
-    needs: test
+    needs: [unit, docs]
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:

@@ -9,6 +9,8 @@
   ],
   "scripts": {
     "test": "node --test packages/*/test/*.test.mjs tests/*.test.mjs",
+    "test:unit": "node --test packages/*/test/*.test.mjs",
+    "test:docs": "node --test tests/docs.test.mjs",
     "test:e2e": "node --test --test-timeout=240000 tests/e2e/*.e2e.test.mjs",
     "test:e2e:cli": "node --test tests/e2e/cli.e2e.test.mjs",
     "test:e2e:joomla": "node --test --test-timeout=240000 tests/e2e/joomla.e2e.test.mjs",
