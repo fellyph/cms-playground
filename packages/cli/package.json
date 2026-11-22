@@ -1,0 +1,18 @@
+{
+  "name": "@cms-playground/cli",
+  "version": "0.1.0",
+  "description": "Run Joomla, WordPress, and other PHP CMSs locally in WebAssembly with zero setup",
+  "license": "GPL-2.0-or-later",
+  "type": "module",
+  "bin": {
+    "cms-playground": "./bin/cms-playground.mjs"
+  },
+  "exports": {
+    ".": "./src/cli.js"
+  },
+  "dependencies": {
+    "@cms-playground/core": "0.1.0",
+    "@cms-playground/joomla": "0.1.0",
+    "@cms-playground/wordpress": "0.1.0"
+  }
+}

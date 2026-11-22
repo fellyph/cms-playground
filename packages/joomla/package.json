@@ -1,0 +1,13 @@
+{
+  "name": "@cms-playground/joomla",
+  "version": "0.1.0",
+  "description": "Joomla adapter for @cms-playground",
+  "license": "GPL-2.0-or-later",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "dependencies": {
+    "@cms-playground/core": "0.1.0"
+  }
+}

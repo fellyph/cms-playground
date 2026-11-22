@@ -1,0 +1,15 @@
+{
+  "name": "cms-playground-monorepo",
+  "private": true,
+  "description": "Multi-CMS WebAssembly Playground CLI powered by @php-wasm",
+  "license": "GPL-2.0-or-later",
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "test": "node --test packages/*/test/*.test.mjs",
+    "start:joomla": "node packages/cli/bin/cms-playground.mjs start --joomla",
+    "start:wp": "node packages/cli/bin/cms-playground.mjs start --wp"
+  }
+}
