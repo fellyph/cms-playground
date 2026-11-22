@@ -25,6 +25,7 @@ jobs:
           cache: npm
 
       - run: npm ci
+      - run: npm run build:site
       - run: npm test
       - run: npm run test:e2e:cli
       - run: node packages/cli/bin/cms-playground.mjs list
