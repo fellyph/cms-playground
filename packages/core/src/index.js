@@ -6,9 +6,10 @@ export {
   bootPhp,
   createRequestQueue,
   mountDirectories,
+  packZip,
   parseMountSpec,
   randomPassword,
   runPhpCode,
   unpackZip,
 } from './runtime.js';
-export { runCmsCli, startPlayground } from './server.js';
+export { buildSnapshot, runBlueprintHeadless, runCmsCli, startPlayground } from './server.js';
