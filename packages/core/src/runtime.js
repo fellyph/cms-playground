@@ -5,6 +5,7 @@ import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { PHP, ProcessIdAllocator } from '@php-wasm/universal';
 import { createNodeFsMountHandler, loadNodeRuntime } from '@php-wasm/node';
+import { EXIT_CODES, PlaygroundError } from './errors.js';
 
 export const DOCUMENT_ROOT = '/var/www/html';
 
@@ -198,7 +199,11 @@ export async function mountDirectories(php, mounts = []) {
     const absHost = resolve(hostPath);
 
     if (!existsSync(absHost)) {
-      throw new Error(`Mount host directory does not exist: ${absHost}`);
+      throw new PlaygroundError(`Mount host directory does not exist: ${absHost}`, {
+        code: 'mount_not_found',
+        exitCode: EXIT_CODES.NOT_FOUND,
+        suggestions: ['Verify the host path passed to --mount or pass --cwd=<project-dir>.'],
+      });
     }
 
     php.mkdir(vfsPath);
@@ -209,11 +214,18 @@ export async function mountDirectories(php, mounts = []) {
 /**
  * Parses CLI --mount specs of the form "hostPath:vfsPath".
  */
-export function parseMountSpec(spec) {
+export function parseMountSpec(spec, baseDir = process.cwd()) {
   const idx = typeof spec === 'string' ? spec.lastIndexOf(':') : -1;
 
   if (idx <= 0 || idx === spec.length - 1) {
-    throw new Error(`Invalid --mount "${spec}". Expected <hostPath>:<vfsPath> (e.g. ./src:/var/www/html/plugins/system/foo)`);
+    throw new PlaygroundError(
+      `Invalid --mount "${spec}". Expected <hostPath>:<vfsPath> (e.g. ./src:/var/www/html/plugins/system/foo)`,
+      {
+        code: 'invalid_mount',
+        exitCode: EXIT_CODES.VALIDATION,
+        suggestions: ['Use --mount=<hostPath>:<vfsPath> where <vfsPath> starts with "/".'],
+      }
+    );
   }
 
   const hostPart = spec.slice(0, idx);
@@ -221,15 +233,29 @@ export function parseMountSpec(spec) {
 
   // Reject bare Windows drive-letter paths (e.g. "C:/foo" or "C:\foo") that lack a :vfsPath separator.
   if (idx === 1 && /^[a-zA-Z]$/.test(hostPart)) {
-    throw new Error(`Invalid --mount "${spec}". Expected <hostPath>:<vfsPath> (e.g. C:\\src:/var/www/html/plugins/system/foo)`);
+    throw new PlaygroundError(
+      `Invalid --mount "${spec}". Expected <hostPath>:<vfsPath> (e.g. C:\\src:/var/www/html/plugins/system/foo)`,
+      {
+        code: 'invalid_mount',
+        exitCode: EXIT_CODES.VALIDATION,
+        suggestions: ['Use --mount=<hostPath>:<vfsPath> where <vfsPath> starts with "/".'],
+      }
+    );
   }
 
   if (!vfsPath.startsWith('/')) {
-    throw new Error(`Invalid --mount "${spec}". VFS path "${vfsPath}" must start with "/"`);
+    throw new PlaygroundError(
+      `Invalid --mount "${spec}". VFS path "${vfsPath}" must start with "/"`,
+      {
+        code: 'invalid_mount',
+        exitCode: EXIT_CODES.VALIDATION,
+        suggestions: ['Prefix the VFS mount path with "/", e.g. /var/www/html/custom.'],
+      }
+    );
   }
 
   return {
-    hostPath: resolve(hostPart),
+    hostPath: resolve(baseDir, hostPart),
     vfsPath,
   };
 }

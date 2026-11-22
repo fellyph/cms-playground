@@ -4,6 +4,7 @@ import { randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { EXIT_CODES, PlaygroundError } from './errors.js';
 
 const DEFAULT_FETCH_TIMEOUT_MS = 60_000;
 
@@ -40,13 +41,35 @@ export async function downloadToCache(
   mkdirSync(dirname(destination), { recursive: true });
   log(`Downloading ${url}`);
 
-  const response = await fetch(url, {
-    redirect: 'follow',
-    signal: timeoutMs > 0 ? AbortSignal.timeout(timeoutMs) : undefined,
-  });
+  let response;
+  try {
+    response = await fetch(url, {
+      redirect: 'follow',
+      signal: timeoutMs > 0 ? AbortSignal.timeout(timeoutMs) : undefined,
+    });
+  } catch (error) {
+    if (error?.name === 'TimeoutError' || error?.name === 'AbortError') {
+      throw error;
+    }
+    throw new PlaygroundError(`Failed to download ${url}: ${error?.message ?? error}`, {
+      code: 'download_failed',
+      exitCode: EXIT_CODES.NETWORK,
+      retryable: true,
+      suggestions: ['Check your network connection and retry the command.'],
+      cause: error,
+    });
+  }
 
   if (!response.ok) {
-    throw new Error(`Failed to download ${url}: HTTP ${response.status} ${response.statusText}`);
+    throw new PlaygroundError(
+      `Failed to download ${url}: HTTP ${response.status} ${response.statusText}`,
+      {
+        code: 'download_failed',
+        exitCode: EXIT_CODES.NETWORK,
+        retryable: true,
+        suggestions: ['Retry the command or verify the requested CMS version exists.'],
+      }
+    );
   }
 
   const bytes = new Uint8Array(await response.arrayBuffer());
