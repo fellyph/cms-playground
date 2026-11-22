@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { describe, it } from 'node:test';
-import { HELP_TEXT, parseCliArgs, run } from '../src/cli.js';
+import { EXIT_CODES, PlaygroundError } from '@cms-playground/core';
+import { HELP_TEXT, isAgentMode, parseCliArgs, run, wantsJsonOutput } from '../src/cli.js';
 
 describe('@cms-playground/cli parseCliArgs', () => {
   it('parses start --joomla with defaults', () => {
@@ -127,9 +128,40 @@ describe('@cms-playground/cli parseCliArgs', () => {
   });
 
   it('rejects empty inline option values', () => {
-    for (const flag of ['--port=', '--php=', '--host=', '--site=', '--blueprint=', '--output=', '--mount=', '--verbosity=']) {
+    for (const flag of ['--port=', '--php=', '--host=', '--site=', '--blueprint=', '--output=', '--mount=', '--verbosity=', '--cwd=']) {
       assert.throws(() => parseCliArgs(['start', '--joomla', flag]), /requires a value/, `Expected ${flag} to throw`);
     }
+  });
+
+  it('parses --cwd before all other options so --mount resolves relative to --cwd', () => {
+    const parsed = parseCliArgs([
+      'start',
+      '--joomla',
+      '--mount=./plugin:/var/www/html/plugins/system/demo',
+      '--cwd=/tmp/project-root',
+      '--json',
+    ]);
+
+    assert.equal(parsed.options.cwd, resolve('/tmp/project-root'));
+    assert.equal(parsed.options.json, true);
+    assert.equal(parsed.options.mounts[0].hostPath, resolve('/tmp/project-root', './plugin'));
+  });
+
+  it('enables agent mode on CMS_PLAYGROUND_AGENT=1 or CI=1 (and ignores CI=true)', () => {
+    assert.equal(isAgentMode({ CMS_PLAYGROUND_AGENT: '1' }), true);
+    assert.equal(isAgentMode({ CI: '1' }), true);
+    assert.equal(isAgentMode({ CI: 'true' }), false);
+    assert.equal(isAgentMode({}), false);
+
+    const agentParsed = parseCliArgs(['list'], { env: { CMS_PLAYGROUND_AGENT: '1' } });
+    assert.equal(agentParsed.options.agentMode, true);
+    assert.equal(agentParsed.options.json, true);
+    assert.equal(agentParsed.options.yes, true);
+    assert.equal(agentParsed.options.noColor, true);
+
+    assert.equal(wantsJsonOutput(['list', '--json'], {}), true);
+    assert.equal(wantsJsonOutput(['cli', '--joomla', '--', '--json'], {}), false);
+    assert.equal(wantsJsonOutput(['list'], { CI: '1' }), true);
   });
 });
 
@@ -191,5 +223,46 @@ describe('@cms-playground/cli run() command dispatch', () => {
     } finally {
       rmSync(workDir, { recursive: true, force: true });
     }
+  });
+
+  it('emits { data } JSON receipts for list --json and run-blueprint --json with --cwd', async () => {
+    const { result: listCode, output: listOut } = await captureLogs(() => run(['list', '--json']));
+    assert.equal(listCode, 0);
+    const listJson = JSON.parse(listOut);
+    assert.ok(Array.isArray(listJson.data.adapters));
+    assert.ok(listJson.data.adapters.some((a) => a.name === 'joomla'));
+    assert.ok(listJson.data.adapters.some((a) => a.name === 'wp'));
+
+    const workDir = mkdtempSync(join(tmpdir(), 'cms-pg-cli-cwd-'));
+    try {
+      const siteDir = join(workDir, 'site');
+      mkdirSync(siteDir, { recursive: true });
+      writeFileSync(join(siteDir, 'wp-config.php'), "<?php\ndefine('WP_DEBUG', false);\n");
+      writeFileSync(
+        join(workDir, 'bp.json'),
+        JSON.stringify({
+          steps: [{ step: 'writeFile', path: 'cwd-marker.txt', data: 'from-cwd' }],
+        })
+      );
+
+      const { result, output } = await captureLogs(() =>
+        run(['run-blueprint', '--wp', '--site=./site', '--blueprint=./bp.json', `--cwd=${workDir}`, '--json'])
+      );
+
+      assert.equal(result, 0);
+      const parsed = JSON.parse(output);
+      assert.equal(parsed.data.cms, 'wp');
+      assert.equal(parsed.data.stepsRun, 1);
+      assert.equal(readFileSync(join(siteDir, 'cwd-marker.txt'), 'utf8'), 'from-cwd');
+    } finally {
+      rmSync(workDir, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects nonexistent --cwd with NOT_FOUND exit code', async () => {
+    await assert.rejects(
+      () => run(['list', '--cwd=/nonexistent-cms-pg-cwd-99999']),
+      (err) => err instanceof PlaygroundError && err.code === 'cwd_not_found' && err.exitCode === EXIT_CODES.NOT_FOUND
+    );
   });
 });

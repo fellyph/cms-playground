@@ -144,6 +144,8 @@ npx cms-playground cli --joomla --site=./my-joomla-site -- cache:clean
 | `--mount=<host:vfs>` | *(none)* | Mount a host folder into VFS after configure (repeatable) |
 | `--mount-before-install=<host:vfs>` | *(none)* | Mount a host folder into VFS before configure (repeatable) |
 | `--auto-mount[=<dir>]` | *(off)* | Auto-detect and mount a Joomla extension or WP plugin/theme (default: CWD) |
+| `--cwd=<path>` | *(process CWD)* | Resolve relative paths (`--site`, `--blueprint`, `--mount`, `--auto-mount`, `--output`) from `<path>` |
+| `--json` | `false` | Emit `{ "data": ... }` JSON receipts to `stdout` and `{ "error": ... }` JSON errors to `stderr` |
 | `--verbosity=<level>` | `normal` | Logging level: `quiet`, `normal`, or `debug` |
 | `--quiet` | `false` | Alias for `--verbosity=quiet` |
 | `-h`, `--help` | — | Show CLI help text |
@@ -158,6 +160,27 @@ npx cms-playground cli --joomla --site=./my-joomla-site -- cache:clean
 | `--skip-mcp` | `false` | Install the bundled skill without writing MCP config |
 | `--dry-run` | `false` | Preview planned file and config changes without writing |
 | `--force` | `false` | Overwrite locally modified skill files |
+
+### Machine-Readable Output & Exit Codes
+
+Pass `--json` (or set `CMS_PLAYGROUND_AGENT=1` / `CI=1`) to enable agent mode: `stdout` receives a single `{ "data": ... }` JSON receipt, `stderr` receives structured `{ "error": { code, message, retryable, recovery, suggestions, pointer? } }` objects on failure, interactive prompts are disabled, and ANSI colors are suppressed.
+
+```bash
+npx cms-playground list --json
+npx cms-playground start --joomla --port=0 --json
+npx cms-playground run-blueprint --wp --cwd=./my-site --site=. --blueprint=./blueprint.json --json
+```
+
+| Exit Code | Meaning |
+|---|---|
+| `0` | Success |
+| `1` | Unknown error |
+| `2` | Validation error (bad flags/args or invalid Blueprint) |
+| `20` | Not found (missing `--site`, `--blueprint`, `--cwd`, `--mount`, or auto-mount target) |
+| `30` | Conflict (e.g. port already in use or locally modified skill file without `--force`) |
+| `40` | Network error (bundle or asset download failed; retryable) |
+| `50` | Timeout (retryable) |
+| `130` | Cancelled (`SIGINT`/`SIGTERM` or declined confirmation prompt) |
 
 ---
 
@@ -184,5 +207,7 @@ Downloaded CMS zips and Joomla static `/media/*` assets are cached locally in `~
 
 | Environment Variable | Purpose |
 |---|---|
+| `CMS_PLAYGROUND_AGENT=1` | Enable agent mode (`--json`, non-interactive, no ANSI colors) |
+| `CI=1` | Enable agent mode (`--json`, non-interactive, no ANSI colors) |
 | `CMS_PLAYGROUND_CACHE_DIR` | Override the root cache directory |
 | `JOOMLA_PLAYGROUND_BASE_URL` | Override the base URL used to download Joomla bundles (defaults to `https://joomla-projects.github.io/joomla-playground/`) |

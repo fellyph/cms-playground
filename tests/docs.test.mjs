@@ -175,6 +175,8 @@ describe('Documentation verification', () => {
       '--mount',
       '--mount-before-install',
       '--auto-mount',
+      '--cwd',
+      '--json',
       '--verbosity',
       '--quiet',
       '--agent',
