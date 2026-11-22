@@ -1,6 +1,6 @@
 // Shared PHP-WASM Node runtime helpers.
 
-import { randomBytes } from 'node:crypto';
+import { randomBytes, randomInt } from 'node:crypto';
 import { resolve } from 'node:path';
 import { PHP, ProcessIdAllocator } from '@php-wasm/universal';
 import { createNodeFsMountHandler, loadNodeRuntime } from '@php-wasm/node';
@@ -28,21 +28,58 @@ export function createRequestQueue() {
  */
 export function randomPassword(length = 12) {
   const alphabet = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  const bytes = randomBytes(length);
+  let out = '';
 
-  return Array.from(bytes, (b) => alphabet[b % alphabet.length]).join('');
+  for (let i = 0; i < length; i++) {
+    out += alphabet[randomInt(alphabet.length)];
+  }
+
+  return out;
 }
 
 /**
- * Boots a @php-wasm/node PHP instance.
+ * Boots a @php-wasm/node PHP instance and releases its claimed process ID on exit or failure.
  */
 export async function bootPhp({ phpVersion = '8.4' } = {}) {
-  const runtime = await loadNodeRuntime(phpVersion, {
-    emscriptenOptions: { processId: processIds.claim() },
-  });
-  const php = new PHP(runtime);
+  const processId = processIds.claim();
+  let released = false;
+  const releaseProcessId = () => {
+    if (!released) {
+      released = true;
+      processIds.release(processId);
+    }
+  };
 
-  php.mkdir(DOCUMENT_ROOT);
+  let runtime;
+  try {
+    runtime = await loadNodeRuntime(phpVersion, {
+      emscriptenOptions: { processId },
+    });
+  } catch (error) {
+    releaseProcessId();
+    throw error;
+  }
+
+  let php;
+  try {
+    php = new PHP(runtime);
+    php.mkdir(DOCUMENT_ROOT);
+  } catch (error) {
+    try {
+      php?.exit();
+    } catch {}
+    releaseProcessId();
+    throw error;
+  }
+
+  const originalExit = php.exit.bind(php);
+  php.exit = (...args) => {
+    try {
+      return originalExit(...args);
+    } finally {
+      releaseProcessId();
+    }
+  };
 
   return php;
 }
@@ -65,7 +102,7 @@ export async function runPhpCode(php, code) {
  * Unpacks a zip archive (Uint8Array) into a target directory inside PHP's virtual filesystem.
  */
 export async function unpackZip(php, zipBytes, targetDir = DOCUMENT_ROOT) {
-  const tmpPath = `/tmp/archive-${process.pid}-${Date.now()}.zip`;
+  const tmpPath = `/tmp/archive-${process.pid}-${randomBytes(6).toString('hex')}.zip`;
 
   php.mkdir(targetDir);
   php.writeFile(tmpPath, zipBytes);
@@ -98,7 +135,9 @@ export async function unpackZip(php, zipBytes, targetDir = DOCUMENT_ROOT) {
           $zip->close();
           throw new RuntimeException('Cannot extract zip archive');
       }
-      $zip->close();
+      if (!$zip->close()) {
+          throw new RuntimeException('Cannot close zip archive');
+      }
       `
     );
   } finally {
@@ -112,7 +151,7 @@ export async function unpackZip(php, zipBytes, targetDir = DOCUMENT_ROOT) {
  * Packs a directory inside PHP's virtual filesystem into a zip archive (Uint8Array).
  */
 export async function packZip(php, sourceDir = DOCUMENT_ROOT) {
-  const tmpPath = `/tmp/snapshot-${process.pid}-${Date.now()}.zip`;
+  const tmpPath = `/tmp/snapshot-${process.pid}-${randomBytes(6).toString('hex')}.zip`;
 
   try {
     await runPhpCode(
@@ -135,7 +174,9 @@ export async function packZip(php, sourceDir = DOCUMENT_ROOT) {
               $zip->addFile($item->getPathname(), $rel);
           }
       }
-      $zip->close();
+      if (!$zip->close()) {
+          throw new RuntimeException('Cannot finalize snapshot zip archive');
+      }
       `
     );
 

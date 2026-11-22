@@ -29,6 +29,7 @@ async function bootSite({
   phpVersion = null,
   url = 'http://127.0.0.1:8790',
   site = null,
+  stageDir = null,
   mountsBeforeInstall = [],
   mounts = [],
   autoMount = null,
@@ -65,6 +66,12 @@ async function bootSite({
     );
   }
 
+  const absSite = site ? resolve(site) : null;
+
+  if (absSite && !existsSync(absSite)) {
+    throw new Error(`Site directory does not exist: ${absSite}`);
+  }
+
   const password = randomPassword();
 
   let detectedAutoMount = null;
@@ -87,92 +94,105 @@ async function bootSite({
   statusLog(`Booting PHP ${effectivePhp} (WebAssembly)...`);
   const php = await bootPhp({ phpVersion: String(effectivePhp) });
 
-  let bundle = null;
+  try {
+    let bundle = null;
 
-  if (site) {
-    const absSite = resolve(site);
+    if (absSite) {
+      statusLog(`Mounting local site ${absSite}...`);
+      await php.mount(DOCUMENT_ROOT, createNodeFsMountHandler(absSite));
+    } else {
+      if (stageDir) {
+        await php.mount(DOCUMENT_ROOT, createNodeFsMountHandler(stageDir));
+      }
 
-    if (!existsSync(absSite)) {
-      throw new Error(`Site directory does not exist: ${absSite}`);
+      const cacheDir = getCacheDir(adapter.name);
+      bundle = await adapter.resolveBundle({ version: effectiveVersion, cacheDir, log: statusLog });
+
+      if (bundle.zipBytes) {
+        statusLog(`Unpacking ${adapter.label} ${bundle.version ?? effectiveVersion}...`);
+        await unpackZip(php, bundle.zipBytes, bundle.extractTo ?? DOCUMENT_ROOT);
+      }
     }
 
-    statusLog(`Mounting local site ${absSite}...`);
-    await php.mount(DOCUMENT_ROOT, createNodeFsMountHandler(absSite));
-  } else {
-    const cacheDir = getCacheDir(adapter.name);
-    bundle = await adapter.resolveBundle({ version: effectiveVersion, cacheDir, log: statusLog });
+    php.chdir(DOCUMENT_ROOT);
 
-    if (bundle.zipBytes) {
-      statusLog(`Unpacking ${adapter.label} ${bundle.version ?? effectiveVersion}...`);
-      await unpackZip(php, bundle.zipBytes, bundle.extractTo ?? DOCUMENT_ROOT);
+    if (mountsBeforeInstall.length > 0) {
+      debugLog(`Mounting ${mountsBeforeInstall.length} pre-install director${mountsBeforeInstall.length === 1 ? 'y' : 'ies'}...`);
+      await mountDirectories(php, mountsBeforeInstall);
     }
+
+    statusLog(`Configuring ${adapter.label}...`);
+    const info = (await adapter.configure({
+      php,
+      documentRoot: DOCUMENT_ROOT,
+      url,
+      password,
+      site: absSite,
+      bundle,
+      log: statusLog,
+    })) ?? {};
+
+    const postInstallMounts = [...(detectedAutoMount?.mounts ?? []), ...mounts];
+
+    if (postInstallMounts.length > 0) {
+      debugLog(`Mounting ${postInstallMounts.length} director${postInstallMounts.length === 1 ? 'y' : 'ies'}...`);
+      await mountDirectories(php, postInstallMounts);
+    }
+
+    if (typeof detectedAutoMount?.postMount === 'function') {
+      await detectedAutoMount.postMount({ php, documentRoot: DOCUMENT_ROOT, url, log: statusLog });
+    }
+
+    const handler = new PHPRequestHandler({
+      php,
+      documentRoot: DOCUMENT_ROOT,
+      absoluteUrl: url,
+      cookieStore: false,
+      getFileNotFoundAction: (relativePath) => adapter.getFileNotFoundAction(relativePath),
+    });
+
+    if (loadedBlueprint) {
+      await runBlueprint(
+        loadedBlueprint.blueprint,
+        {
+          php,
+          handler,
+          documentRoot: DOCUMENT_ROOT,
+          url,
+          baseUrl: loadedBlueprint.baseUrl,
+          runPhp: (code) => runPhpCode(php, code),
+          log: statusLog,
+        },
+        adapter.blueprintSteps ?? {}
+      );
+    }
+
+    return {
+      php,
+      handler,
+      bundle,
+      info,
+      password,
+      loadedBlueprint,
+      detectedAutoMount,
+      effectivePhp: String(effectivePhp),
+      effectiveVersion,
+      statusLog,
+      debugLog,
+    };
+  } catch (error) {
+    try {
+      php.exit();
+    } catch {}
+    throw error;
   }
+}
 
-  php.chdir(DOCUMENT_ROOT);
-
-  if (mountsBeforeInstall.length > 0) {
-    debugLog(`Mounting ${mountsBeforeInstall.length} pre-install director${mountsBeforeInstall.length === 1 ? 'y' : 'ies'}...`);
-    await mountDirectories(php, mountsBeforeInstall);
-  }
-
-  statusLog(`Configuring ${adapter.label}...`);
-  const info = (await adapter.configure({
-    php,
-    documentRoot: DOCUMENT_ROOT,
-    url,
-    password,
-    site: site ? resolve(site) : null,
-    bundle,
-    log: statusLog,
-  })) ?? {};
-
-  const postInstallMounts = [...(detectedAutoMount?.mounts ?? []), ...mounts];
-
-  if (postInstallMounts.length > 0) {
-    debugLog(`Mounting ${postInstallMounts.length} director${postInstallMounts.length === 1 ? 'y' : 'ies'}...`);
-    await mountDirectories(php, postInstallMounts);
-  }
-
-  if (typeof detectedAutoMount?.postMount === 'function') {
-    await detectedAutoMount.postMount({ php, documentRoot: DOCUMENT_ROOT, url, log: statusLog });
-  }
-
-  const handler = new PHPRequestHandler({
-    php,
-    documentRoot: DOCUMENT_ROOT,
-    absoluteUrl: url,
-    cookieStore: false,
-    getFileNotFoundAction: (relativePath) => adapter.getFileNotFoundAction(relativePath),
+function closeHttpServer(server) {
+  return new Promise((done) => {
+    server.close(() => done());
+    server.closeAllConnections?.();
   });
-
-  if (loadedBlueprint) {
-    await runBlueprint(
-      loadedBlueprint.blueprint,
-      {
-        php,
-        handler,
-        documentRoot: DOCUMENT_ROOT,
-        url,
-        baseUrl: loadedBlueprint.baseUrl,
-        runPhp: (code) => runPhpCode(php, code),
-        log: statusLog,
-      },
-      adapter.blueprintSteps ?? {}
-    );
-  }
-
-  return {
-    php,
-    handler,
-    bundle,
-    info,
-    password,
-    loadedBlueprint,
-    effectivePhp: String(effectivePhp),
-    effectiveVersion,
-    statusLog,
-    debugLog,
-  };
 }
 
 /**
@@ -193,7 +213,50 @@ export async function startPlayground({
   quiet = false,
   log = (msg) => console.log(msg),
 } = {}) {
-  const initialUrl = `http://${host}:${port}`;
+  let handleRequest = null;
+
+  const server = http.createServer((request, response) => {
+    if (!handleRequest) {
+      response.statusCode = 503;
+      response.end(request.method === 'HEAD' ? undefined : 'Playground is starting...');
+      return;
+    }
+
+    return handleRequest(request, response);
+  });
+
+  await new Promise((resolveListen, rejectListen) => {
+    server.once('error', rejectListen);
+    server.listen(port, host, () => {
+      server.off('error', rejectListen);
+      resolveListen();
+    });
+  });
+
+  const boundPort = server.address()?.port ?? port;
+  const boundUrl = `http://${host}:${boundPort}`;
+
+  let booted;
+  try {
+    booted = await bootSite({
+      adapter,
+      version,
+      phpVersion,
+      url: boundUrl,
+      site,
+      mountsBeforeInstall,
+      mounts,
+      autoMount,
+      blueprintSource,
+      verbosity,
+      quiet,
+      log,
+    });
+  } catch (error) {
+    await closeHttpServer(server);
+    throw error;
+  }
+
   const {
     php,
     handler,
@@ -204,113 +267,102 @@ export async function startPlayground({
     effectivePhp,
     effectiveVersion,
     statusLog,
-  } = await bootSite({
-    adapter,
-    version,
-    phpVersion,
-    url: initialUrl,
-    site,
-    mountsBeforeInstall,
-    mounts,
-    autoMount,
-    blueprintSource,
-    verbosity,
-    quiet,
-    log,
-  });
+  } = booted;
 
-  const serialized = createRequestQueue();
+  try {
+    const serialized = createRequestQueue();
+    const staticCacheDir = adapter.serveStatic ? getCacheDir(adapter.name) : null;
 
-  const server = http.createServer(async (request, response) => {
-    const started = performance.now();
+    handleRequest = async (request, response) => {
+      const started = performance.now();
 
-    try {
-      // Allow the adapter to serve static assets (e.g. Joomla's split /media/ bundle) directly.
-      if (adapter.serveStatic && ['GET', 'HEAD'].includes(request.method)) {
-        const staticResult = await adapter.serveStatic({
-          request,
-          bundle,
-          cacheDir: getCacheDir(adapter.name),
-        });
+      try {
+        // Allow the adapter to serve static assets (e.g. Joomla's split /media/ bundle) directly.
+        if (adapter.serveStatic && ['GET', 'HEAD'].includes(request.method)) {
+          const staticResult = await adapter.serveStatic({
+            request,
+            bundle,
+            cacheDir: staticCacheDir,
+          });
 
-        if (staticResult) {
-          response.statusCode = staticResult.status ?? 200;
+          if (staticResult) {
+            response.statusCode = staticResult.status ?? 200;
 
-          for (const [name, value] of Object.entries(staticResult.headers ?? {})) {
-            response.setHeader(name, value);
+            for (const [name, value] of Object.entries(staticResult.headers ?? {})) {
+              response.setHeader(name, value);
+            }
+
+            response.end(request.method === 'HEAD' ? undefined : Buffer.from(staticResult.body));
+            statusLog(`${request.method} ${request.url} ${response.statusCode} ${Math.round(performance.now() - started)} ms [static]`);
+
+            return;
           }
-
-          response.end(request.method === 'HEAD' ? undefined : Buffer.from(staticResult.body));
-          statusLog(`${request.method} ${request.url} ${response.statusCode} ${Math.round(performance.now() - started)} ms [static]`);
-
-          return;
         }
+
+        const chunks = [];
+
+        for await (const chunk of request) {
+          chunks.push(chunk);
+        }
+
+        const headers = Object.fromEntries(
+          Object.entries(request.headers).map(([name, value]) => [name, Array.isArray(value) ? value.join(', ') : value])
+        );
+        const body = Buffer.concat(chunks);
+        const phpResponse = await serialized(() =>
+          handler.request({
+            url: request.url,
+            method: request.method,
+            headers,
+            body: body.length ? new Uint8Array(body) : undefined,
+          })
+        );
+
+        response.statusCode = phpResponse.httpStatusCode;
+
+        for (const [name, value] of Object.entries(phpResponse.headers)) {
+          response.setHeader(name, value);
+        }
+
+        response.end(request.method === 'HEAD' ? undefined : Buffer.from(phpResponse.bytes));
+        statusLog(`${request.method} ${request.url} ${phpResponse.httpStatusCode} ${Math.round(performance.now() - started)} ms`);
+      } catch (error) {
+        if (!response.headersSent) {
+          response.statusCode = 500;
+          response.end(request.method === 'HEAD' ? undefined : String(error?.stack ?? error));
+        } else if (!response.writableEnded) {
+          response.end();
+        }
+        statusLog(`${request.method} ${request.url} 500 ${error?.message ?? error}`);
       }
+    };
 
-      const chunks = [];
+    const landingPage = loadedBlueprint?.blueprint?.landingPage ?? adapter.adminPath ?? '/';
 
-      for await (const chunk of request) {
-        chunks.push(chunk);
-      }
-
-      const headers = Object.fromEntries(
-        Object.entries(request.headers).map(([name, value]) => [name, Array.isArray(value) ? value.join(', ') : value])
-      );
-      const body = Buffer.concat(chunks);
-      const phpResponse = await serialized(() =>
-        handler.request({
-          url: request.url,
-          method: request.method,
-          headers,
-          body: body.length ? new Uint8Array(body) : undefined,
-        })
-      );
-
-      response.statusCode = phpResponse.httpStatusCode;
-
-      for (const [name, value] of Object.entries(phpResponse.headers)) {
-        response.setHeader(name, value);
-      }
-
-      response.end(Buffer.from(phpResponse.bytes));
-      statusLog(`${request.method} ${request.url} ${phpResponse.httpStatusCode} ${Math.round(performance.now() - started)} ms`);
-    } catch (error) {
-      response.statusCode = 500;
-      response.end(String(error?.stack ?? error));
-      statusLog(`${request.method} ${request.url} 500 ${error?.message ?? error}`);
-    }
-  });
-
-  await new Promise((resolveListen, rejectListen) => {
-    server.once('error', rejectListen);
-    server.listen(port, host, () => resolveListen());
-  });
-
-  const boundPort = server.address()?.port ?? port;
-  const boundUrl = `http://${host}:${boundPort}`;
-  const landingPage = loadedBlueprint?.blueprint?.landingPage ?? adapter.adminPath ?? '/';
-
-  return {
-    url: boundUrl,
-    port: boundPort,
-    adminUrl: `${boundUrl}${adapter.adminPath ?? '/'}`,
-    landingUrl: `${boundUrl}${landingPage}`,
-    username: info.username ?? 'admin',
-    password: info.password ?? password,
-    version: bundle?.version ?? effectiveVersion,
-    phpVersion: effectivePhp,
-    php,
-    close: () =>
-      new Promise((done) => {
-        server.close(() => {
-          try {
-            php.exit();
-          } catch {}
-          done();
-        });
-        server.closeAllConnections?.();
-      }),
-  };
+    return {
+      url: boundUrl,
+      port: boundPort,
+      adminUrl: `${boundUrl}${adapter.adminPath ?? '/'}`,
+      landingUrl: `${boundUrl}${landingPage}`,
+      username: info.username ?? 'admin',
+      password: info.password ?? password,
+      version: bundle?.version ?? effectiveVersion,
+      phpVersion: effectivePhp,
+      php,
+      close: async () => {
+        await closeHttpServer(server);
+        try {
+          php.exit();
+        } catch {}
+      },
+    };
+  } catch (error) {
+    try {
+      php.exit();
+    } catch {}
+    await closeHttpServer(server);
+    throw error;
+  }
 }
 
 /**
@@ -428,54 +480,53 @@ export async function runCmsCli({
   phpVersion = null,
   mountsBeforeInstall = [],
   mounts = [],
+  autoMount = null,
+  blueprintSource = null,
+  verbosity = 'normal',
+  quiet = false,
   log = () => {},
 }) {
   if (!adapter?.cliEntrypoint) {
     throw new Error(`${adapter?.label ?? 'This CMS'} adapter does not define a CLI entrypoint`);
   }
 
-  const effectivePhp = String(phpVersion ?? adapter.defaultPhp ?? '8.4');
   let tempSiteDir = null;
   let hostSiteDir = site ? resolve(site) : null;
 
   try {
     if (!hostSiteDir) {
       // @php-wasm cannot call php.cli() after php.run() on the same WASM instance.
-      // Stage bundle unpack + configure into a temp directory with a setup instance,
+      // Stage bundle unpack + configure into a temp directory via bootSite(),
       // then run php.cli() on a fresh PHP instance mounted to that directory.
       tempSiteDir = mkdtempSync(join(tmpdir(), 'cms-playground-cli-'));
       hostSiteDir = tempSiteDir;
-
-      const setupPhp = await bootPhp({ phpVersion: effectivePhp });
-
-      try {
-        await setupPhp.mount(DOCUMENT_ROOT, createNodeFsMountHandler(hostSiteDir));
-
-        const cacheDir = getCacheDir(adapter.name);
-        const bundle = await adapter.resolveBundle({ version: version ?? adapter.defaultVersion, cacheDir, log });
-
-        if (bundle.zipBytes) {
-          await unpackZip(setupPhp, bundle.zipBytes, bundle.extractTo ?? DOCUMENT_ROOT);
-        }
-
-        if (mountsBeforeInstall.length > 0) {
-          await mountDirectories(setupPhp, mountsBeforeInstall);
-        }
-
-        await adapter.configure({
-          php: setupPhp,
-          documentRoot: DOCUMENT_ROOT,
-          url: 'http://127.0.0.1:8790',
-          password: randomPassword(),
-          bundle,
-          log,
-        });
-      } finally {
-        try {
-          setupPhp.exit();
-        } catch {}
-      }
     }
+
+    const booted = await bootSite({
+      adapter,
+      version,
+      phpVersion,
+      site,
+      stageDir: site ? null : hostSiteDir,
+      mountsBeforeInstall,
+      mounts: [],
+      autoMount,
+      blueprintSource,
+      verbosity,
+      quiet,
+      log,
+    });
+
+    const effectivePhp = booted.effectivePhp;
+    const allMounts = [
+      ...mountsBeforeInstall,
+      ...(booted.detectedAutoMount?.mounts ?? []),
+      ...mounts,
+    ];
+
+    try {
+      booted.php.exit();
+    } catch {}
 
     const php = await bootPhp({ phpVersion: effectivePhp });
 
@@ -483,8 +534,8 @@ export async function runCmsCli({
       await php.mount(DOCUMENT_ROOT, createNodeFsMountHandler(hostSiteDir));
       php.chdir(DOCUMENT_ROOT);
 
-      if (mounts.length > 0) {
-        await mountDirectories(php, mounts);
+      if (allMounts.length > 0) {
+        await mountDirectories(php, allMounts);
       }
 
       const response = await php.cli(['php', `${DOCUMENT_ROOT}/${adapter.cliEntrypoint}`, ...args]);

@@ -1,17 +1,22 @@
 // Local disk cache for downloaded CMS bundles and static assets.
 
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { randomBytes } from 'node:crypto';
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 
+const DEFAULT_FETCH_TIMEOUT_MS = 60_000;
+
 /**
  * Returns the root cache directory (~/.cache/cms-playground or $XDG_CACHE_HOME/cms-playground).
+ * When CMS_PLAYGROUND_CACHE_DIR is explicitly set, it is used directly as the root.
  */
 export function getCacheDir(...segments) {
-  const base = process.env.CMS_PLAYGROUND_CACHE_DIR
-    || process.env.XDG_CACHE_HOME
-    || join(homedir(), '.cache');
-  const dir = join(base, 'cms-playground', ...segments);
+  const explicit = process.env.CMS_PLAYGROUND_CACHE_DIR;
+  const root = explicit
+    ? explicit
+    : join(process.env.XDG_CACHE_HOME || join(homedir(), '.cache'), 'cms-playground');
+  const dir = join(root, ...segments);
 
   mkdirSync(dir, { recursive: true });
 
@@ -23,7 +28,11 @@ export function getCacheDir(...segments) {
  *
  * @returns {Promise<string>} Path to the cached file
  */
-export async function downloadToCache(url, destination, { force = false, log = () => {} } = {}) {
+export async function downloadToCache(
+  url,
+  destination,
+  { force = false, timeoutMs = DEFAULT_FETCH_TIMEOUT_MS, log = () => {} } = {}
+) {
   if (!force && existsSync(destination)) {
     return destination;
   }
@@ -31,17 +40,27 @@ export async function downloadToCache(url, destination, { force = false, log = (
   mkdirSync(dirname(destination), { recursive: true });
   log(`Downloading ${url}`);
 
-  const response = await fetch(url, { redirect: 'follow' });
+  const response = await fetch(url, {
+    redirect: 'follow',
+    signal: timeoutMs > 0 ? AbortSignal.timeout(timeoutMs) : undefined,
+  });
 
   if (!response.ok) {
     throw new Error(`Failed to download ${url}: HTTP ${response.status} ${response.statusText}`);
   }
 
   const bytes = new Uint8Array(await response.arrayBuffer());
-  const tmp = `${destination}.${process.pid}.tmp`;
+  const tmp = `${destination}.${process.pid}.${randomBytes(6).toString('hex')}.tmp`;
 
-  writeFileSync(tmp, bytes);
-  renameSync(tmp, destination);
+  try {
+    writeFileSync(tmp, bytes);
+    renameSync(tmp, destination);
+  } catch (error) {
+    try {
+      rmSync(tmp, { force: true });
+    } catch {}
+    throw error;
+  }
 
   return destination;
 }
