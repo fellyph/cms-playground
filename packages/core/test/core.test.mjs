@@ -4,13 +4,16 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
 import {
+  bootPhp,
   buildSnapshot,
   getAdapter,
   listAdapters,
   parseMountSpec,
   registerAdapter,
   runBlueprintHeadless,
+  runPhpCode,
   startPlayground,
+  unpackZip,
 } from '../src/index.js';
 
 describe('@cms-playground/core', () => {
@@ -148,6 +151,48 @@ describe('@cms-playground/core', () => {
       assert.deepEqual(Array.from(magic), [0x50, 0x4b, 0x03, 0x04]);
     } finally {
       rmSync(workDir, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects Zip Slip entries in unpackZip while extracting valid archives', async () => {
+    const php = await bootPhp({ phpVersion: '8.4' });
+
+    const makeZip = async (entries) => {
+      php.writeFile('/tmp/make-zip.json', JSON.stringify(entries));
+      await runPhpCode(
+        php,
+        `
+        $entries = json_decode(file_get_contents('/tmp/make-zip.json'), true);
+        unlink('/tmp/make-zip.json');
+        $zip = new ZipArchive();
+        $zip->open('/tmp/test.zip', ZipArchive::CREATE | ZipArchive::OVERWRITE);
+        foreach ($entries as $name => $content) {
+            $zip->addFromString($name, $content);
+        }
+        $zip->close();
+        `
+      );
+      const bytes = php.readFileAsBuffer('/tmp/test.zip');
+      php.unlink('/tmp/test.zip');
+      return bytes;
+    };
+
+    try {
+      for (const badPath of ['../evil.txt', 'sub/../../evil.txt', '..\\evil.txt', '/etc/evil.txt', 'C:/evil.txt']) {
+        const badZip = await makeZip({ [badPath]: 'pwned' });
+        await assert.rejects(
+          () => unpackZip(php, badZip, '/var/www/html/extract-target'),
+          /Unsafe zip entry path/
+        );
+      }
+
+      assert.equal(php.fileExists('/var/www/html/evil.txt'), false);
+
+      const goodZip = await makeZip({ 'nested/ok.txt': 'safe-content' });
+      await unpackZip(php, goodZip, '/var/www/html/extract-target');
+      assert.equal(php.readFileAsText('/var/www/html/extract-target/nested/ok.txt'), 'safe-content');
+    } finally {
+      php.exit();
     }
   });
 });

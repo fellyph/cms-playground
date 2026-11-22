@@ -78,6 +78,22 @@ export async function unpackZip(php, zipBytes, targetDir = DOCUMENT_ROOT) {
       if ($zip->open(${JSON.stringify(tmpPath)}) !== true) {
           throw new RuntimeException('Cannot open zip archive');
       }
+      for ($i = 0; $i < $zip->numFiles; $i++) {
+          $entry = $zip->getNameIndex($i);
+          if ($entry === false || strpos($entry, "\\0") !== false) {
+              $zip->close();
+              throw new RuntimeException('Unsafe zip entry path');
+          }
+          $normalized = str_replace('\\\\', '/', $entry);
+          if (
+              ($normalized !== '' && $normalized[0] === '/') ||
+              preg_match('/^[a-zA-Z]:/', $normalized) ||
+              in_array('..', explode('/', $normalized), true)
+          ) {
+              $zip->close();
+              throw new RuntimeException('Unsafe zip entry path: ' . $entry);
+          }
+      }
       if (!$zip->extractTo(${JSON.stringify(targetDir)})) {
           $zip->close();
           throw new RuntimeException('Cannot extract zip archive');
