@@ -25,7 +25,10 @@ import {
 } from '@cms-playground/core';
 import { joomlaAdapter } from '@cms-playground/joomla';
 import { wordpressAdapter } from '@cms-playground/wordpress';
+import { buildCliMap, buildCliPaths } from './map.js';
 import { setupAgent } from './setup-agent.js';
+
+export { buildCliMap, buildCliPaths };
 
 // Register built-in CMS adapters.
 registerAdapter(joomlaAdapter);
@@ -44,6 +47,7 @@ Usage:
   cms-playground cli            --joomla [options] -- <cms-cli-args...>
   cms-playground setup agent    [--agent <id>] [--project] [--yes] [--skip-mcp] [--dry-run]
   cms-playground list
+  cms-playground map            [--json | --paths]
 
 Commands:
   start           Boot a CMS in PHP-WASM and start a local HTTP server
@@ -52,6 +56,7 @@ Commands:
   cli             Run the CMS's native CLI (e.g. cli/joomla.php) in PHP-WASM
   setup agent     Install the bundled Agent Skill and configure MCP for coding agents
   list            Show registered CMS adapters and supported PHP versions
+  map             Output a machine-readable catalog of commands, adapters, and Blueprint steps
 
 CMS Selection (pick one):
   --joomla[=<ver>]   Run Joomla (default: latest, e.g. --joomla or --joomla=6.2)
@@ -69,6 +74,7 @@ Options:
   --auto-mount[=dir]             Auto-detect and mount a Joomla extension or WP plugin/theme (default: CWD)
   --cwd=<path>                   Resolve relative paths (--site, --blueprint, --mount, --auto-mount, --output) from <path>
   --json                         Emit machine-readable JSON receipts to stdout and structured errors to stderr
+  --paths                        Print canonical command invocations one per line (for map)
   --verbosity=<level>            Logging level: quiet, normal, debug (default: normal)
   --quiet                        Alias for --verbosity=quiet
   -h, --help                     Show this help message
@@ -170,6 +176,7 @@ export function parseCliArgs(argv, { env = process.env, cwd = process.cwd() } = 
     output: null,
     cwd: resolvedCwd,
     json: agentMode,
+    paths: false,
     agentMode,
     noColor: agentMode,
     mountsBeforeInstall: [],
@@ -200,6 +207,11 @@ export function parseCliArgs(argv, { env = process.env, cwd = process.cwd() } = 
 
     if (arg === '--json') {
       options.json = true;
+      continue;
+    }
+
+    if (arg === '--paths') {
+      options.paths = true;
       continue;
     }
 
@@ -430,10 +442,32 @@ export async function run(argv = process.argv.slice(2), { env = process.env, cwd
     if (options.json) {
       emitJson({
         help: HELP_TEXT,
-        commands: ['start', 'run-blueprint', 'build-snapshot', 'cli', 'setup agent', 'list'],
+        commands: ['start', 'run-blueprint', 'build-snapshot', 'cli', 'setup agent', 'list', 'map'],
       });
     } else {
       console.log(HELP_TEXT);
+    }
+
+    return EXIT_CODES.OK;
+  }
+
+  if (command === 'map') {
+    const cliMap = buildCliMap();
+
+    if (options.paths) {
+      const paths = buildCliPaths(cliMap);
+      if (options.json) {
+        emitJson({ paths });
+      } else {
+        console.log(paths.join('\n'));
+      }
+      return EXIT_CODES.OK;
+    }
+
+    if (options.json) {
+      emitJson(cliMap);
+    } else {
+      console.log(JSON.stringify({ data: cliMap }, null, 2));
     }
 
     return EXIT_CODES.OK;

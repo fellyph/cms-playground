@@ -130,6 +130,7 @@ npx cms-playground cli --joomla --site=./my-joomla-site -- cache:clean
 | `cli` | Run the CMS's native CLI (e.g. `cli/joomla.php`) in PHP-WASM |
 | `setup agent` | Install the bundled Agent Skill and configure MCP for supported coding agents |
 | `list` | Show registered CMS adapters and supported PHP versions |
+| `map` | Output a machine-readable catalog of commands, adapters, and Blueprint steps |
 
 | Flag | Default | Description |
 |---|---|---|
@@ -146,6 +147,7 @@ npx cms-playground cli --joomla --site=./my-joomla-site -- cache:clean
 | `--auto-mount[=<dir>]` | *(off)* | Auto-detect and mount a Joomla extension or WP plugin/theme (default: CWD) |
 | `--cwd=<path>` | *(process CWD)* | Resolve relative paths (`--site`, `--blueprint`, `--mount`, `--auto-mount`, `--output`) from `<path>` |
 | `--json` | `false` | Emit `{ "data": ... }` JSON receipts to `stdout` and `{ "error": ... }` JSON errors to `stderr` |
+| `--paths` | `false` | Print canonical command invocations one per line (for `map`) |
 | `--verbosity=<level>` | `normal` | Logging level: `quiet`, `normal`, or `debug` |
 | `--quiet` | `false` | Alias for `--verbosity=quiet` |
 | `-h`, `--help` | — | Show CLI help text |
@@ -167,6 +169,8 @@ Pass `--json` (or set `CMS_PLAYGROUND_AGENT=1` / `CI=1`) to enable agent mode: `
 
 ```bash
 npx cms-playground list --json
+npx cms-playground map --json
+npx cms-playground map --paths
 npx cms-playground start --joomla --port=0 --json
 npx cms-playground run-blueprint --wp --cwd=./my-site --site=. --blueprint=./blueprint.json --json
 ```

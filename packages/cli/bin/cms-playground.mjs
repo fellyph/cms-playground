@@ -6,6 +6,18 @@ import { run, wantsJsonOutput } from '../src/cli.js';
 const argv = process.argv.slice(2);
 const jsonMode = wantsJsonOutput(argv, process.env);
 
+function flushAndExit(code) {
+  let pending = 2;
+  const done = () => {
+    pending -= 1;
+    if (pending === 0) {
+      process.exit(code);
+    }
+  };
+  process.stdout.write('', done);
+  process.stderr.write('', done);
+}
+
 const onCancel = (signal) => {
   const err = new PlaygroundError(`Command cancelled by ${signal}`, {
     code: 'cancelled',
@@ -19,7 +31,7 @@ const onCancel = (signal) => {
     process.stderr.write(`Error: ${err.message}\n`);
   }
 
-  process.exit(EXIT_CODES.CANCELLED);
+  flushAndExit(EXIT_CODES.CANCELLED);
 };
 
 process.once('SIGINT', onCancel);
@@ -32,7 +44,7 @@ try {
   process.off('SIGTERM', onCancel);
 
   if (typeof exitCode === 'number') {
-    process.exit(exitCode);
+    flushAndExit(exitCode);
   }
 } catch (error) {
   process.off('SIGINT', onCancel);
@@ -46,5 +58,5 @@ try {
     process.stderr.write(`Error: ${classified.message}\n`);
   }
 
-  process.exit(classified.exitCode);
+  flushAndExit(classified.exitCode);
 }

@@ -113,6 +113,19 @@ const blueprintSteps = {
   },
 };
 
+const blueprintStepSchemas = Object.freeze({
+  setGlobalConfig: Object.freeze({
+    requiredFields: ['values'],
+    optionalFields: [],
+    description: 'Update properties in Joomla configuration.php',
+  }),
+  runSql: Object.freeze({
+    requiredFields: ['sql'],
+    optionalFields: [],
+    description: 'Execute SQL statements against the Joomla SQLite database',
+  }),
+});
+
 export const joomlaAdapter = {
   name: 'joomla',
   label: 'Joomla',
@@ -123,6 +136,7 @@ export const joomlaAdapter = {
   adminPath: '/administrator/',
   cliEntrypoint: 'cli/joomla.php',
   blueprintSteps,
+  blueprintStepSchemas,
 
   async resolveBundle({ version, cacheDir, log }) {
     const baseUrl = playgroundBaseUrl();

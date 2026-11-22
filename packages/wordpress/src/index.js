@@ -88,6 +88,24 @@ const blueprintSteps = {
   },
 };
 
+const blueprintStepSchemas = Object.freeze({
+  defineWpConfigConsts: Object.freeze({
+    requiredFields: ['consts'],
+    optionalFields: [],
+    description: 'Define PHP constants in wp-config.php',
+  }),
+  setSiteOption: Object.freeze({
+    requiredFields: ['option', 'value'],
+    optionalFields: [],
+    description: 'Update a WordPress site option via update_option()',
+  }),
+  activatePlugin: Object.freeze({
+    requiredFields: ['pluginPath'],
+    optionalFields: [],
+    description: 'Activate a WordPress plugin by its relative plugin file path',
+  }),
+});
+
 export const wordpressAdapter = {
   name: 'wp',
   label: 'WordPress',
@@ -98,6 +116,7 @@ export const wordpressAdapter = {
   adminPath: '/wp-admin/',
   cliEntrypoint: null,
   blueprintSteps,
+  blueprintStepSchemas,
 
   async resolveBundle({ version, cacheDir, log }) {
     const resolvedVersion = validateWpVersion(version);
