@@ -26,6 +26,10 @@ npx cms-playground start --joomla --blueprint=./blueprint.json
 npx cms-playground run-blueprint --joomla --blueprint=./blueprint.json
 npx cms-playground build-snapshot --joomla --blueprint=./blueprint.json --output=./snapshot.zip
 
+# Persist a local site directory, bind a custom host, or control log verbosity
+npx cms-playground start --joomla --site=./my-site --host=127.0.0.1 --verbosity=debug
+npx cms-playground run-blueprint --wp --blueprint=./blueprint.json --quiet
+
 # Run Joomla's own CLI (cli/joomla.php) without local PHP
 npx cms-playground cli --joomla -- user:list
 
