@@ -182,8 +182,15 @@ export const joomlaAdapter = {
 
       $dbFile = $cfg['root'] . '/data/joomla.sqlite';
       if ($cfg['resetPassword'] && is_file($dbFile)) {
+          $dbprefix = 'jos_';
+          if (preg_match('/public\\s+\\$dbprefix\\s*=\\s*[\\\'\\"]([^\\\'\\"]+)[\\\'\\"]\\s*;/', $config, $m)) {
+              $dbprefix = $m[1];
+          }
+          if (!preg_match('/^[a-zA-Z0-9_]+$/', $dbprefix)) {
+              throw new RuntimeException('Invalid Joomla $dbprefix: ' . $dbprefix);
+          }
           $db = new PDO('sqlite:' . $dbFile);
-          $stmt = $db->prepare("UPDATE jos_users SET password = ? WHERE username = 'admin'");
+          $stmt = $db->prepare('UPDATE "' . $dbprefix . 'users" SET password = ? WHERE username = \\'admin\\'');
           $stmt->execute([password_hash($cfg['password'], PASSWORD_DEFAULT)]);
       }
       `

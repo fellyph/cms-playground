@@ -98,4 +98,10 @@ describe('@cms-playground/cli parseCliArgs', () => {
   it('rejects unknown options', () => {
     assert.throws(() => parseCliArgs(['start', '--joomla', '--nope']), /Unknown option/);
   });
+
+  it('rejects empty inline option values', () => {
+    for (const flag of ['--port=', '--php=', '--host=', '--site=', '--blueprint=', '--output=', '--mount=', '--verbosity=']) {
+      assert.throws(() => parseCliArgs(['start', '--joomla', flag]), /requires a value/, `Expected ${flag} to throw`);
+    }
+  });
 });

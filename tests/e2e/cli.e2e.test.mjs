@@ -3,10 +3,12 @@
 // Modeled on @wp-playground/cli's run-cli.spec.ts, cli.spec.ts, and mounts.spec.ts.
 
 import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
 import {
+  CLI_BIN,
   createMockJoomlaSite,
   createMockWordPressSite,
   createTempDir,
@@ -169,6 +171,57 @@ describe('CLI E2E: mounts and verbosity', () => {
       assert.equal(normalRes.exitCode, 0);
       assert.match(normalRes.stdout, /Ran 1 blueprint step\(s\) on WordPress/);
       assert.doesNotMatch(normalRes.stdout, /Mounting \d+ director/);
+    } finally {
+      tmp.cleanup();
+    }
+  });
+
+  it('suppresses the startup banner when starting with --quiet and exits cleanly on SIGTERM', async () => {
+    const tmp = createTempDir('e2e-start-quiet-');
+    try {
+      createMockWordPressSite(tmp.dir);
+      const port = await getFreePort();
+      const child = spawn(
+        process.execPath,
+        [CLI_BIN, 'start', '--wp', `--site=${tmp.dir}`, `--port=${port}`, '--quiet'],
+        { stdio: ['ignore', 'pipe', 'pipe'] }
+      );
+
+      let stdout = '';
+      let stderr = '';
+      child.stdout.on('data', (chunk) => {
+        stdout += chunk.toString('utf8');
+      });
+      child.stderr.on('data', (chunk) => {
+        stderr += chunk.toString('utf8');
+      });
+
+      const exitPromise = new Promise((resolveExit) => {
+        child.once('exit', (code, signal) => resolveExit({ code, signal }));
+      });
+
+      try {
+        // Poll until HTTP server responds 200
+        let ok = false;
+        const deadline = Date.now() + 15_000;
+        while (Date.now() < deadline) {
+          try {
+            const res = await fetch(`http://127.0.0.1:${port}/`);
+            if (res.status === 200) {
+              ok = true;
+              break;
+            }
+          } catch {}
+          await new Promise((r) => setTimeout(r, 100));
+        }
+
+        assert.equal(ok, true, `Server did not become ready. STDERR:\n${stderr}`);
+        assert.equal(stdout, '', `Expected empty stdout in --quiet mode, got:\n${stdout}`);
+      } finally {
+        child.kill('SIGTERM');
+        const exit = await exitPromise;
+        assert.equal(exit.code, 0);
+      }
     } finally {
       tmp.cleanup();
     }
@@ -372,5 +425,32 @@ describe('CLI E2E: error handling', () => {
     const missingOutput = await runCliProcess(['build-snapshot', '--joomla']);
     assert.notEqual(missingOutput.exitCode, 0);
     assert.match(missingOutput.stderr, /--output/);
+
+    const emptyPort = await runCliProcess(['start', '--joomla', '--port=']);
+    assert.notEqual(emptyPort.exitCode, 0);
+    assert.match(emptyPort.stderr, /Option --port requires a value/);
+
+    const relativeMount = await runCliProcess(['start', '--joomla', '--mount=./src:relative/vfs']);
+    assert.notEqual(relativeMount.exitCode, 0);
+    assert.match(relativeMount.stderr, /must start with "\/"/);
+
+    const tmp = createTempDir('e2e-err-mount-');
+    try {
+      createMockWordPressSite(tmp.dir);
+      const bpPath = join(tmp.dir, 'bp.json');
+      writeFileSync(bpPath, JSON.stringify({ steps: [] }));
+
+      const missingMountHost = await runCliProcess([
+        'run-blueprint',
+        '--wp',
+        `--site=${tmp.dir}`,
+        `--blueprint=${bpPath}`,
+        '--mount=/nonexistent-cms-pg-host-dir:/var/www/html/x',
+      ]);
+      assert.notEqual(missingMountHost.exitCode, 0);
+      assert.match(missingMountHost.stderr, /Mount host directory does not exist/);
+    } finally {
+      tmp.cleanup();
+    }
   });
 });

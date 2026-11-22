@@ -130,12 +130,16 @@ export function parseCliArgs(argv) {
 
       const nextValue = () => {
         if (inlineValue !== null) {
+          if (inlineValue === '') {
+            throw new Error(`Option --${key} requires a value`);
+          }
+
           return inlineValue;
         }
 
         const next = mainArgs[++i];
 
-        if (next === undefined || next.startsWith('--')) {
+        if (next === undefined || next === '' || next.startsWith('--')) {
           throw new Error(`Option --${key} requires a value`);
         }
 
@@ -238,16 +242,21 @@ export async function run(argv = process.argv.slice(2)) {
       quiet: options.quiet,
     });
 
-    console.log('');
-    console.log(`${adapter.label} ${instance.version} (PHP ${instance.phpVersion}) is running:`);
-    console.log(`  Site:  ${instance.url}/`);
-    console.log(`  Admin: ${instance.adminUrl}`);
-    console.log(`  Login: ${instance.username} / ${instance.password}`);
-    console.log('Press Ctrl+C to stop.');
+    if (!options.quiet) {
+      console.log('');
+      console.log(`${adapter.label} ${instance.version} (PHP ${instance.phpVersion}) is running:`);
+      console.log(`  Site:  ${instance.url}/`);
+      console.log(`  Admin: ${instance.adminUrl}`);
+      console.log(`  Login: ${instance.username} / ${instance.password}`);
+      console.log('Press Ctrl+C to stop.');
+    }
 
     const shutdown = async () => {
-      await instance.close();
-      process.exit(0);
+      try {
+        await instance.close();
+      } finally {
+        process.exit(0);
+      }
     };
 
     process.once('SIGINT', shutdown);

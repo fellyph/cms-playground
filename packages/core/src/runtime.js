@@ -1,6 +1,7 @@
 // Shared PHP-WASM Node runtime helpers.
 
 import { randomBytes, randomInt } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { PHP, ProcessIdAllocator } from '@php-wasm/universal';
 import { createNodeFsMountHandler, loadNodeRuntime } from '@php-wasm/node';
@@ -195,6 +196,11 @@ export async function packZip(php, sourceDir = DOCUMENT_ROOT) {
 export async function mountDirectories(php, mounts = []) {
   for (const { hostPath, vfsPath } of mounts) {
     const absHost = resolve(hostPath);
+
+    if (!existsSync(absHost)) {
+      throw new Error(`Mount host directory does not exist: ${absHost}`);
+    }
+
     php.mkdir(vfsPath);
     await php.mount(vfsPath, createNodeFsMountHandler(absHost));
   }
@@ -204,14 +210,26 @@ export async function mountDirectories(php, mounts = []) {
  * Parses CLI --mount specs of the form "hostPath:vfsPath".
  */
 export function parseMountSpec(spec) {
-  const idx = spec.lastIndexOf(':');
+  const idx = typeof spec === 'string' ? spec.lastIndexOf(':') : -1;
 
   if (idx <= 0 || idx === spec.length - 1) {
     throw new Error(`Invalid --mount "${spec}". Expected <hostPath>:<vfsPath> (e.g. ./src:/var/www/html/plugins/system/foo)`);
   }
 
+  const hostPart = spec.slice(0, idx);
+  const vfsPath = spec.slice(idx + 1);
+
+  // Reject bare Windows drive-letter paths (e.g. "C:/foo" or "C:\foo") that lack a :vfsPath separator.
+  if (idx === 1 && /^[a-zA-Z]$/.test(hostPart)) {
+    throw new Error(`Invalid --mount "${spec}". Expected <hostPath>:<vfsPath> (e.g. C:\\src:/var/www/html/plugins/system/foo)`);
+  }
+
+  if (!vfsPath.startsWith('/')) {
+    throw new Error(`Invalid --mount "${spec}". VFS path "${vfsPath}" must start with "/"`);
+  }
+
   return {
-    hostPath: resolve(spec.slice(0, idx)),
-    vfsPath: spec.slice(idx + 1),
+    hostPath: resolve(hostPart),
+    vfsPath,
   };
 }

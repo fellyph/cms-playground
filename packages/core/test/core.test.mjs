@@ -45,15 +45,33 @@ describe('@cms-playground/core', () => {
     assert.ok(listAdapters().includes(dummy));
   });
 
-  it('parses host:vfs mount specs and rejects malformed ones', () => {
+  it('parses host:vfs mount specs and rejects malformed ones', async () => {
     const parsed = parseMountSpec('./src:/var/www/html/plugins/system/test');
 
     assert.equal(parsed.vfsPath, '/var/www/html/plugins/system/test');
     assert.ok(parsed.hostPath.endsWith('/src'));
 
+    // Valid Windows drive-letter mount spec
+    const winParsed = parseMountSpec('C:\\src:/var/www/html/plugins/system/test');
+    assert.equal(winParsed.vfsPath, '/var/www/html/plugins/system/test');
+
     assert.throws(() => parseMountSpec('no-colon'), /Invalid --mount/);
     assert.throws(() => parseMountSpec(':missing-host'), /Invalid --mount/);
     assert.throws(() => parseMountSpec('missing-vfs:'), /Invalid --mount/);
+    assert.throws(() => parseMountSpec('C:/bare-windows-path'), /Invalid --mount/);
+    assert.throws(() => parseMountSpec('C:\\bare-windows-path'), /Invalid --mount/);
+    assert.throws(() => parseMountSpec('./src:relative/vfs/path'), /must start with "\/"/);
+
+    const php = await bootPhp({ phpVersion: '8.4' });
+    try {
+      const { mountDirectories } = await import('../src/index.js');
+      await assert.rejects(
+        () => mountDirectories(php, [{ hostPath: '/nonexistent-cms-pg-mount-dir', vfsPath: '/var/www/html/x' }]),
+        /Mount host directory does not exist/
+      );
+    } finally {
+      php.exit();
+    }
   });
 
   it('boots PHP 8.4 in WebAssembly and serves HTTP requests via startPlayground', async () => {
