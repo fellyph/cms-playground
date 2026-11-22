@@ -1,0 +1,1003 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <title>@cms-playground — Local CMS Sandboxes for AI Agents</title>
+    <meta
+      name="description"
+      content="Run Joomla and WordPress locally in WebAssembly with zero server or database setup. Copy-pasteable agent prompts, interactive CLI &amp; Blueprint builder, and drop-in AGENTS.md rules."
+    />
+    <meta property="og:title" content="@cms-playground — Local CMS Sandboxes for AI Agents" />
+    <meta
+      property="og:description"
+      content="Boot disposable Joomla and WordPress instances in PHP-WASM in one command. Built for coding agents, Blueprints, and zero-setup local testing."
+    />
+    <meta property="og:type" content="website" />
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700&display=swap"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+    <script type="module" src="./app.js"></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to main content</a>
+
+    <div class="live-region" role="status" aria-live="polite" aria-atomic="true" id="copy-status"></div>
+
+    <!-- Top Launch Announcement Bar -->
+    <div class="announcement-bar">
+      <div class="announcement-inner">
+        <span class="announcement-lead">PHP-WASM CLI v0.1</span>
+        <span class="announcement-sep" aria-hidden="true">·</span>
+        <a
+          class="announcement-link"
+          href="https://github.com/fellyph/cms-playground"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Boot Joomla &amp; WordPress locally with zero PHP, MySQL, or Docker setup →
+        </a>
+      </div>
+    </div>
+
+    <div class="page-shell">
+      <!-- Sticky / Floating Header -->
+      <header class="site-header" id="site-header">
+        <div class="header-inner">
+          <a class="site-logo" href="#top" aria-label="cms-playground home">
+            <span class="logo-mark" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none">
+                <path
+                  d="M6 8L10.5 12L6 16"
+                  stroke="currentColor"
+                  stroke-width="2.2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+                <path
+                  d="M12.5 16H18"
+                  stroke="currentColor"
+                  stroke-width="2.2"
+                  stroke-linecap="round"
+                />
+              </svg>
+            </span>
+            <span class="logo-text">cms-playground</span>
+          </a>
+
+          <nav class="site-nav" aria-label="Primary">
+            <button
+              class="menu-button"
+              type="button"
+              popovertarget="site-menu"
+              popovertargetaction="toggle"
+              aria-controls="site-menu"
+            >
+              <svg class="menu-icon" viewBox="0 0 20 20" width="18" height="18" fill="none" aria-hidden="true">
+                <path
+                  d="M3 6H17M3 10H17M3 14H17"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                  stroke-linecap="round"
+                />
+              </svg>
+              <span>Menu</span>
+            </button>
+
+            <ul id="site-menu" class="site-menu" popover="auto">
+              <li><a href="#why">Why</a></li>
+              <li><a href="#prompts">Prompts</a></li>
+              <li><a href="#builder">CLI Builder</a></li>
+              <li><a href="#agent-rules">AGENTS.md</a></li>
+              <li>
+                <a
+                  href="https://github.com/fellyph/cms-playground/blob/main/docs/GETTING-STARTED.md"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Docs
+                </a>
+              </li>
+              <li class="nav-cta-item">
+                <a
+                  class="btn-header-pill"
+                  href="https://github.com/fellyph/cms-playground"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  GitHub <span aria-hidden="true">→</span>
+                </a>
+              </li>
+            </ul>
+          </nav>
+        </div>
+      </header>
+
+      <main id="main">
+        <!-- Hero Panel -->
+        <section class="panel hero-panel" id="top" aria-labelledby="hero-heading">
+          <div class="panel-inner hero-inner">
+            <p class="eyebrow">
+              <span class="eyebrow-dot" aria-hidden="true"></span>
+              Multi-CMS WebAssembly CLI · Powered by <code>@php-wasm/node</code>
+            </p>
+
+            <h1 class="display-l" id="hero-heading">
+              A local CMS sandbox for <span class="text-accent">what agents build.</span>
+            </h1>
+
+            <p class="hero-lead">
+              Give your coding agent a disposable Joomla or WordPress site in one command. Mount extensions,
+              run Blueprints headlessly, verify live HTTP responses, and export portable <code>.zip</code>
+              snapshots—without installing PHP, Apache, or MySQL.
+            </p>
+
+            <div class="hero-actions">
+              <a class="btn btn-primary" href="#prompts">
+                Copy an agent prompt <span aria-hidden="true">→</span>
+              </a>
+              <a class="btn btn-glass" href="#builder">
+                Build a CLI command
+              </a>
+            </div>
+
+            <div class="quick-command" aria-label="Quick start command">
+              <div class="quick-command-label">
+                <span class="prompt-dollar" aria-hidden="true">$</span>
+                <code id="hero-cmd-text">npx cms-playground start --joomla --auto-mount</code>
+              </div>
+              <div class="quick-command-actions">
+                <div class="cms-mini-toggle" role="group" aria-label="Quick command CMS">
+                  <button
+                    type="button"
+                    class="mini-toggle-btn is-active"
+                    data-hero-cmd="npx cms-playground start --joomla --auto-mount"
+                    aria-pressed="true"
+                  >
+                    Joomla
+                  </button>
+                  <button
+                    type="button"
+                    class="mini-toggle-btn"
+                    data-hero-cmd="npx cms-playground start --wp --auto-mount"
+                    aria-pressed="false"
+                  >
+                    WordPress
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  class="btn-copy-inline"
+                  data-copy-target="hero-cmd-text"
+                >
+                  Copy
+                </button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Editorial "Why" Section -->
+        <section class="panel section-panel" id="why" aria-labelledby="why-heading">
+          <div class="panel-inner">
+            <div class="editorial-block">
+              <h2 class="section-title" id="why-heading">Why @cms-playground for agents</h2>
+              <div class="editorial-copy">
+                <p>
+                  Coding agents are great at writing Joomla extensions, WordPress plugins, and themes—until
+                  they need a live CMS to actually test what they wrote. Docker stacks are slow to boot, local
+                  PHP versions drift, and shared databases leak state between runs.
+                </p>
+                <p>
+                  <code>@cms-playground</code> runs real PHP inside WebAssembly via <code>@php-wasm/node</code>
+                  with SQLite out of the box. Your agent runs a single terminal command, gets a clean local URL
+                  and admin credentials, verifies its changes against a real runtime, and throws the sandbox
+                  away when done.
+                </p>
+                <p>
+                  Every workflow is scriptable. Use <code>--auto-mount</code> to detect and activate the
+                  project in the current directory, <code>run-blueprint</code> to execute declarative JSON
+                  setup headlessly in CI, or <code>build-snapshot</code> to package the configured site into a
+                  portable <code>.zip</code> archive.
+                </p>
+              </div>
+            </div>
+
+            <div class="feature-grid">
+              <article class="feature-card">
+                <div class="card-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" width="20" height="20" fill="none">
+                    <path
+                      d="M13 2L4 14H12L11 22L20 10H12L13 2Z"
+                      stroke="currentColor"
+                      stroke-width="1.8"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    />
+                  </svg>
+                </div>
+                <h3>Zero-setup PHP-WASM</h3>
+                <p>
+                  Boots Joomla (<code>5.4</code>, <code>6.2</code>) and WordPress (<code>6.7+</code>) on PHP
+                  <code>7.4</code>–<code>8.5</code>. Bundles cache locally in
+                  <code>~/.cache/cms-playground</code> for instant repeat runs.
+                </p>
+              </article>
+
+              <article class="feature-card">
+                <div class="card-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" width="20" height="20" fill="none">
+                    <path
+                      d="M4 7V5C4 4.44772 4.44772 4 5 4H9L11 6H19C19.5523 6 20 6.44772 20 7V19C20 19.5523 19.5523 20 19 20H5C4.44772 20 4 19.5523 4 19V7Z"
+                      stroke="currentColor"
+                      stroke-width="1.8"
+                      stroke-linejoin="round"
+                    />
+                    <path
+                      d="M9 13L11.2 15.2L15.5 10.8"
+                      stroke="currentColor"
+                      stroke-width="1.8"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    />
+                  </svg>
+                </div>
+                <h3>Auto-mount &amp; verify</h3>
+                <p>
+                  Pass <code>--auto-mount</code> to detect Joomla XML manifests or WordPress plugin/theme
+                  headers, mount them via <code>NODEFS</code>, and run discovery or activation automatically.
+                </p>
+              </article>
+
+              <article class="feature-card">
+                <div class="card-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" width="20" height="20" fill="none">
+                    <rect
+                      x="4"
+                      y="4"
+                      width="16"
+                      height="16"
+                      rx="3"
+                      stroke="currentColor"
+                      stroke-width="1.8"
+                    />
+                    <path
+                      d="M8 9H16M8 13H13M8 17H11"
+                      stroke="currentColor"
+                      stroke-width="1.8"
+                      stroke-linecap="round"
+                    />
+                  </svg>
+                </div>
+                <h3>Headless Blueprints &amp; CLI</h3>
+                <p>
+                  Chain <code>runPHP</code>, <code>writeFile</code>, <code>runSql</code>,
+                  <code>setSiteOption</code>, or forward directly to <code>cli/joomla.php</code> with
+                  <code>cms-playground cli --joomla -- user:list</code>.
+                </p>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        <!-- Copy-Pasteable Agent Prompts Section -->
+        <section class="panel section-panel" id="prompts" aria-labelledby="prompts-heading">
+          <div class="panel-inner">
+            <div class="section-header-row">
+              <div>
+                <h2 class="section-title" id="prompts-heading">Copy-pasteable agent prompts</h2>
+                <p class="section-subtitle">
+                  Paste any prompt directly into Claude Code, Cursor, Codex, Antigravity, or Gemini CLI.
+                  Each one tells your agent the exact <code>@cms-playground</code> command and verification step.
+                </p>
+              </div>
+
+              <div class="filter-pills" role="group" aria-label="Filter prompts by CMS">
+                <button type="button" class="filter-pill is-active" data-prompt-filter="all" aria-pressed="true">
+                  All
+                </button>
+                <button type="button" class="filter-pill" data-prompt-filter="joomla" aria-pressed="false">
+                  Joomla
+                </button>
+                <button type="button" class="filter-pill" data-prompt-filter="wp" aria-pressed="false">
+                  WordPress
+                </button>
+              </div>
+            </div>
+
+            <div class="prompt-list" id="prompt-list">
+              <!-- Prompt 1 -->
+              <article class="prompt-card" data-cms="joomla">
+                <div class="prompt-card-top">
+                  <div class="prompt-meta">
+                    <span class="cms-badge cms-badge-joomla">Joomla</span>
+                    <span class="prompt-tag">Auto-mount &amp; smoke test</span>
+                  </div>
+                  <button
+                    type="button"
+                    class="btn-copy-prompt"
+                    data-copy-text="Start a disposable Joomla sandbox using `npx cms-playground start --joomla --auto-mount --port=8790`. Confirm our local extension installs cleanly, request the homepage and `/administrator/`, verify HTTP 200 with no PHP fatal errors, and report the live URL and credentials."
+                  >
+                    Copy prompt
+                  </button>
+                </div>
+                <p class="prompt-text">
+                  “Start a disposable Joomla sandbox using <code>npx cms-playground start --joomla --auto-mount --port=8790</code>.
+                  Confirm our local extension installs cleanly, request the homepage and <code>/administrator/</code>,
+                  verify HTTP 200 with no PHP fatal errors, and report the live URL and credentials.”
+                </p>
+                <details class="prompt-details">
+                  <summary>Inspect underlying CLI command</summary>
+                  <div class="details-body">
+                    <div class="code-frame">
+                      <div class="code-frame-bar">
+                        <span class="code-lang">Bash</span>
+                        <button
+                          type="button"
+                          class="code-copy-btn"
+                          data-copy-text="npx cms-playground start --joomla --auto-mount --port=8790"
+                          aria-label="Copy Bash command"
+                        >
+                          Copy
+                        </button>
+                      </div>
+                      <pre><code>npx cms-playground start --joomla --auto-mount --port=8790</code></pre>
+                    </div>
+                  </div>
+                </details>
+              </article>
+
+              <!-- Prompt 2 -->
+              <article class="prompt-card" data-cms="wp">
+                <div class="prompt-card-top">
+                  <div class="prompt-meta">
+                    <span class="cms-badge cms-badge-wp">WordPress</span>
+                    <span class="prompt-tag">Plugin / theme verification</span>
+                  </div>
+                  <button
+                    type="button"
+                    class="btn-copy-prompt"
+                    data-copy-text="Boot a local WordPress 6.7 playground on PHP 8.4 with our current directory mounted via `npx cms-playground start --wp=6.7 --php=8.4 --auto-mount --port=8791`. Verify the plugin or theme activates without warnings, check the rendered HTML, and summarize any PHP notices."
+                  >
+                    Copy prompt
+                  </button>
+                </div>
+                <p class="prompt-text">
+                  “Boot a local WordPress 6.7 playground on PHP 8.4 with our current directory mounted via
+                  <code>npx cms-playground start --wp=6.7 --php=8.4 --auto-mount --port=8791</code>. Verify the
+                  plugin or theme activates without warnings, check the rendered HTML, and summarize any PHP notices.”
+                </p>
+                <details class="prompt-details">
+                  <summary>Inspect underlying CLI command</summary>
+                  <div class="details-body">
+                    <div class="code-frame">
+                      <div class="code-frame-bar">
+                        <span class="code-lang">Bash</span>
+                        <button
+                          type="button"
+                          class="code-copy-btn"
+                          data-copy-text="npx cms-playground start --wp=6.7 --php=8.4 --auto-mount --port=8791"
+                          aria-label="Copy Bash command"
+                        >
+                          Copy
+                        </button>
+                      </div>
+                      <pre><code>npx cms-playground start --wp=6.7 --php=8.4 --auto-mount --port=8791</code></pre>
+                    </div>
+                  </div>
+                </details>
+              </article>
+
+              <!-- Prompt 3 -->
+              <article class="prompt-card" data-cms="joomla wp">
+                <div class="prompt-card-top">
+                  <div class="prompt-meta">
+                    <span class="cms-badge cms-badge-multi">Joomla + WP</span>
+                    <span class="prompt-tag">Headless Blueprint CI</span>
+                  </div>
+                  <button
+                    type="button"
+                    class="btn-copy-prompt"
+                    data-copy-text="Write a `blueprint.json` that enables debug mode, configures the site title, and runs a PHP smoke-test assertion via `runPHP`. Execute it headlessly with `npx cms-playground run-blueprint --joomla --blueprint=./blueprint.json --verbosity=debug` and fix any failing steps."
+                  >
+                    Copy prompt
+                  </button>
+                </div>
+                <p class="prompt-text">
+                  “Write a <code>blueprint.json</code> that enables debug mode, configures the site title, and
+                  runs a PHP smoke-test assertion via <code>runPHP</code>. Execute it headlessly with
+                  <code>npx cms-playground run-blueprint --joomla --blueprint=./blueprint.json --verbosity=debug</code>
+                  and fix any failing steps.”
+                </p>
+                <details class="prompt-details">
+                  <summary>Inspect underlying CLI command</summary>
+                  <div class="details-body">
+                    <div class="code-frame">
+                      <div class="code-frame-bar">
+                        <span class="code-lang">Bash</span>
+                        <button
+                          type="button"
+                          class="code-copy-btn"
+                          data-copy-text="npx cms-playground run-blueprint --joomla --blueprint=./blueprint.json --verbosity=debug"
+                          aria-label="Copy Bash command"
+                        >
+                          Copy
+                        </button>
+                      </div>
+                      <pre><code>npx cms-playground run-blueprint --joomla --blueprint=./blueprint.json --verbosity=debug</code></pre>
+                    </div>
+                  </div>
+                </details>
+              </article>
+
+              <!-- Prompt 4 -->
+              <article class="prompt-card" data-cms="joomla wp">
+                <div class="prompt-card-top">
+                  <div class="prompt-meta">
+                    <span class="cms-badge cms-badge-multi">Joomla + WP</span>
+                    <span class="prompt-tag">Portable .zip snapshot</span>
+                  </div>
+                  <button
+                    type="button"
+                    class="btn-copy-prompt"
+                    data-copy-text="Build a reproducible site snapshot by running `npx cms-playground build-snapshot --wp --blueprint=./blueprint.json --output=./dist/site-snapshot.zip`. Verify the archive exists, inspect its size, and list the top-level files inside the zip."
+                  >
+                    Copy prompt
+                  </button>
+                </div>
+                <p class="prompt-text">
+                  “Build a reproducible site snapshot by running
+                  <code>npx cms-playground build-snapshot --wp --blueprint=./blueprint.json --output=./dist/site-snapshot.zip</code>.
+                  Verify the archive exists, inspect its size, and list the top-level files inside the zip.”
+                </p>
+                <details class="prompt-details">
+                  <summary>Inspect underlying CLI command</summary>
+                  <div class="details-body">
+                    <div class="code-frame">
+                      <div class="code-frame-bar">
+                        <span class="code-lang">Bash</span>
+                        <button
+                          type="button"
+                          class="code-copy-btn"
+                          data-copy-text="npx cms-playground build-snapshot --wp --blueprint=./blueprint.json --output=./dist/site-snapshot.zip"
+                          aria-label="Copy Bash command"
+                        >
+                          Copy
+                        </button>
+                      </div>
+                      <pre><code>npx cms-playground build-snapshot --wp --blueprint=./blueprint.json --output=./dist/site-snapshot.zip</code></pre>
+                    </div>
+                  </div>
+                </details>
+              </article>
+
+              <!-- Prompt 5 -->
+              <article class="prompt-card" data-cms="joomla">
+                <div class="prompt-card-top">
+                  <div class="prompt-meta">
+                    <span class="cms-badge cms-badge-joomla">Joomla</span>
+                    <span class="prompt-tag">Native CLI passthrough</span>
+                  </div>
+                  <button
+                    type="button"
+                    class="btn-copy-prompt"
+                    data-copy-text="Use `npx cms-playground cli --joomla -- user:list` to inspect the registered Joomla users without requiring local PHP. If we have a persistent local site folder at `./my-joomla-site`, pass `--site=./my-joomla-site` and run `cache:clean` afterwards."
+                  >
+                    Copy prompt
+                  </button>
+                </div>
+                <p class="prompt-text">
+                  “Use <code>npx cms-playground cli --joomla -- user:list</code> to inspect the registered
+                  Joomla users without requiring local PHP. If we have a persistent local site folder at
+                  <code>./my-joomla-site</code>, pass <code>--site=./my-joomla-site</code> and run
+                  <code>cache:clean</code> afterwards.”
+                </p>
+                <details class="prompt-details">
+                  <summary>Inspect underlying CLI command</summary>
+                  <div class="details-body">
+                    <div class="code-frame">
+                      <div class="code-frame-bar">
+                        <span class="code-lang">Bash</span>
+                        <button
+                          type="button"
+                          class="code-copy-btn"
+                          data-copy-text="npx cms-playground cli --joomla -- user:list"
+                          aria-label="Copy Bash command"
+                        >
+                          Copy
+                        </button>
+                      </div>
+                      <pre><code>npx cms-playground cli --joomla -- user:list</code></pre>
+                    </div>
+                  </div>
+                </details>
+              </article>
+
+              <!-- Prompt 6 -->
+              <article class="prompt-card" data-cms="wp">
+                <div class="prompt-card-top">
+                  <div class="prompt-meta">
+                    <span class="cms-badge cms-badge-wp">WordPress</span>
+                    <span class="prompt-tag">Pre-install config overlay</span>
+                  </div>
+                  <button
+                    type="button"
+                    class="btn-copy-prompt"
+                    data-copy-text="Mount `./overlay` before WordPress configures its environment using `npx cms-playground start --wp --mount-before-install=./overlay:/var/www/html/wp-content/mu-plugins --port=8792`, then verify our must-use plugin executes on the first request."
+                  >
+                    Copy prompt
+                  </button>
+                </div>
+                <p class="prompt-text">
+                  “Mount <code>./overlay</code> before WordPress configures its environment using
+                  <code>npx cms-playground start --wp --mount-before-install=./overlay:/var/www/html/wp-content/mu-plugins --port=8792</code>,
+                  then verify our must-use plugin executes on the first request.”
+                </p>
+                <details class="prompt-details">
+                  <summary>Inspect underlying CLI command</summary>
+                  <div class="details-body">
+                    <div class="code-frame">
+                      <div class="code-frame-bar">
+                        <span class="code-lang">Bash</span>
+                        <button
+                          type="button"
+                          class="code-copy-btn"
+                          data-copy-text="npx cms-playground start --wp --mount-before-install=./overlay:/var/www/html/wp-content/mu-plugins --port=8792"
+                          aria-label="Copy Bash command"
+                        >
+                          Copy
+                        </button>
+                      </div>
+                      <pre><code>npx cms-playground start --wp --mount-before-install=./overlay:/var/www/html/wp-content/mu-plugins --port=8792</code></pre>
+                    </div>
+                  </div>
+                </details>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        <!-- Interactive CLI & Blueprint Builder -->
+        <section class="panel section-panel" id="builder" aria-labelledby="builder-heading">
+          <div class="panel-inner">
+            <div class="section-header-stack">
+              <h2 class="section-title" id="builder-heading">Interactive CLI &amp; Blueprint builder</h2>
+              <p class="section-subtitle">
+                Configure your target CMS, PHP runtime, and flags. Copy the generated CLI command, a matching
+                natural-language agent prompt, or a starter <code>blueprint.json</code>.
+              </p>
+            </div>
+
+            <div class="workbench">
+              <form class="workbench-controls" id="builder-form" aria-label="CLI command configuration">
+                <fieldset class="control-group">
+                  <legend>CMS Adapter</legend>
+                  <div class="choice-row">
+                    <label class="choice-pill">
+                      <input type="radio" name="cms" value="joomla" checked />
+                      <span>Joomla (<code>--joomla</code>)</span>
+                    </label>
+                    <label class="choice-pill">
+                      <input type="radio" name="cms" value="wp" />
+                      <span>WordPress (<code>--wp</code>)</span>
+                    </label>
+                  </div>
+                </fieldset>
+
+                <fieldset class="control-group">
+                  <legend>Command</legend>
+                  <div class="choice-grid">
+                    <label class="choice-pill">
+                      <input type="radio" name="command" value="start" checked />
+                      <span><code>start</code></span>
+                    </label>
+                    <label class="choice-pill">
+                      <input type="radio" name="command" value="run-blueprint" />
+                      <span><code>run-blueprint</code></span>
+                    </label>
+                    <label class="choice-pill">
+                      <input type="radio" name="command" value="build-snapshot" />
+                      <span><code>build-snapshot</code></span>
+                    </label>
+                    <label class="choice-pill">
+                      <input type="radio" name="command" value="cli" />
+                      <span><code>cli</code></span>
+                    </label>
+                  </div>
+                </fieldset>
+
+                <div class="field-row">
+                  <div class="field">
+                    <label for="php-version">PHP Version</label>
+                    <select id="php-version" name="php">
+                      <option value="8.4" selected>8.4 (default)</option>
+                      <option value="8.3">8.3</option>
+                      <option value="8.5">8.5</option>
+                      <option value="8.2">8.2 (WordPress)</option>
+                    </select>
+                  </div>
+
+                  <div class="field">
+                    <label for="cms-version">CMS Version</label>
+                    <input
+                      id="cms-version"
+                      name="cmsVersion"
+                      type="text"
+                      value="latest"
+                      placeholder="latest, 5.4, 6.7"
+                      autocomplete="off"
+                    />
+                  </div>
+
+                  <div class="field" id="port-field">
+                    <label for="port-input">Port</label>
+                    <input
+                      id="port-input"
+                      name="port"
+                      type="number"
+                      min="0"
+                      max="65535"
+                      value="8790"
+                    />
+                  </div>
+                </div>
+
+                <div class="field" id="cli-args-field" hidden>
+                  <label for="cli-args-input">Joomla CLI Arguments (after <code>--</code>)</label>
+                  <input
+                    id="cli-args-input"
+                    name="cliArgs"
+                    type="text"
+                    value="user:list"
+                    placeholder="user:list, cache:clean"
+                    autocomplete="off"
+                  />
+                </div>
+
+                <div class="field" id="output-path-field" hidden>
+                  <label for="output-path-input">Snapshot Output (<code>--output</code>)</label>
+                  <input
+                    id="output-path-input"
+                    name="outputPath"
+                    type="text"
+                    value="./snapshot.zip"
+                    autocomplete="off"
+                  />
+                </div>
+
+                <fieldset class="control-group">
+                  <legend>Flags</legend>
+                  <div class="checkbox-stack">
+                    <label class="checkbox-row" for="flag-automount">
+                      <input type="checkbox" id="flag-automount" name="autoMount" checked />
+                      <span><code>--auto-mount</code> — detect &amp; activate extension/plugin in CWD</span>
+                    </label>
+                    <label class="checkbox-row" for="flag-blueprint">
+                      <input type="checkbox" id="flag-blueprint" name="useBlueprint" />
+                      <span><code>--blueprint=./blueprint.json</code> — run declarative setup steps</span>
+                    </label>
+                    <label class="checkbox-row" for="flag-quiet">
+                      <input type="checkbox" id="flag-quiet" name="quiet" />
+                      <span><code>--verbosity=debug</code> — verbose logs for agent diagnostics</span>
+                    </label>
+                  </div>
+                </fieldset>
+              </form>
+
+              <div class="workbench-output">
+                <div class="output-tabs" role="tablist" aria-label="Generated output format">
+                  <button
+                    type="button"
+                    class="output-tab is-active"
+                    role="tab"
+                    id="tab-cli"
+                    aria-selected="true"
+                    aria-controls="panel-cli"
+                    data-output-tab="cli"
+                  >
+                    CLI Command
+                  </button>
+                  <button
+                    type="button"
+                    class="output-tab"
+                    role="tab"
+                    id="tab-prompt"
+                    aria-selected="false"
+                    aria-controls="panel-prompt"
+                    data-output-tab="prompt"
+                  >
+                    Agent Prompt
+                  </button>
+                  <button
+                    type="button"
+                    class="output-tab"
+                    role="tab"
+                    id="tab-blueprint"
+                    aria-selected="false"
+                    aria-controls="panel-blueprint"
+                    data-output-tab="blueprint"
+                  >
+                    Blueprint JSON
+                  </button>
+                </div>
+
+                <div class="code-frame output-frame" id="panel-cli" role="tabpanel" aria-labelledby="tab-cli">
+                  <div class="code-frame-bar">
+                    <span class="code-lang">Bash</span>
+                    <button type="button" class="code-copy-btn" data-copy-target="out-cli">Copy</button>
+                  </div>
+                  <pre><code id="out-cli">npx cms-playground start --joomla --php=8.4 --port=8790 --auto-mount</code></pre>
+                </div>
+
+                <div
+                  class="code-frame output-frame"
+                  id="panel-prompt"
+                  role="tabpanel"
+                  aria-labelledby="tab-prompt"
+                  hidden
+                >
+                  <div class="code-frame-bar">
+                    <span class="code-lang">Agent Prompt</span>
+                    <button type="button" class="code-copy-btn btn-accent-mini" data-copy-target="out-prompt">
+                      Copy prompt
+                    </button>
+                  </div>
+                  <pre class="wrap-pre"><code id="out-prompt"></code></pre>
+                </div>
+
+                <div
+                  class="code-frame output-frame"
+                  id="panel-blueprint"
+                  role="tabpanel"
+                  aria-labelledby="tab-blueprint"
+                  hidden
+                >
+                  <div class="code-frame-bar">
+                    <span class="code-lang">blueprint.json</span>
+                    <button type="button" class="code-copy-btn" data-copy-target="out-blueprint">Copy JSON</button>
+                  </div>
+                  <pre><code id="out-blueprint"></code></pre>
+                </div>
+
+                <p class="builder-note" id="builder-note">
+                  Tip: Use <code>--port=0</code> in CI or multi-agent runs to let the OS assign a free port automatically.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Drop-in Agent Instructions (AGENTS.md / CLAUDE.md / Cursor / Antigravity) -->
+        <section class="panel section-panel" id="agent-rules" aria-labelledby="rules-heading">
+          <div class="panel-inner">
+            <div class="section-header-row">
+              <div>
+                <h2 class="section-title" id="rules-heading">Drop-in agent instructions</h2>
+                <p class="section-subtitle">
+                  Add one of these files to your repository so your coding agent knows how to boot, test, and
+                  verify your Joomla or WordPress code with <code>@cms-playground</code> automatically.
+                </p>
+              </div>
+
+              <div class="filter-pills" role="group" aria-label="Select agent instruction format">
+                <button type="button" class="filter-pill is-active" data-rule-target="agents" aria-pressed="true">
+                  AGENTS.md
+                </button>
+                <button type="button" class="filter-pill" data-rule-target="claude" aria-pressed="false">
+                  CLAUDE.md
+                </button>
+                <button type="button" class="filter-pill" data-rule-target="cursor" aria-pressed="false">
+                  Cursor Rule
+                </button>
+                <button type="button" class="filter-pill" data-rule-target="skill" aria-pressed="false">
+                  SKILL.md
+                </button>
+              </div>
+            </div>
+
+            <div class="code-frame rules-frame">
+              <div class="code-frame-bar">
+                <span class="code-lang" id="rule-filename">AGENTS.md</span>
+                <div class="code-frame-actions">
+                  <button type="button" class="code-copy-btn" id="download-rule-btn">Download</button>
+                  <button type="button" class="code-copy-btn btn-accent-mini" data-copy-target="rule-content">
+                    Copy snippet
+                  </button>
+                </div>
+              </div>
+              <pre class="rules-pre"><code id="rule-content"></code></pre>
+            </div>
+          </div>
+        </section>
+
+        <!-- Closing CTA Panel + Works With Any AI Strip -->
+        <section class="panel cta-panel" aria-labelledby="cta-heading">
+          <div class="cta-glow" aria-hidden="true"></div>
+          <div class="panel-inner cta-inner">
+            <h2 class="display-m" id="cta-heading">
+              Test what agents make with <span class="text-accent">@cms-playground.</span>
+            </h2>
+            <p class="cta-lead">
+              Open source, GPL-2.0-or-later, Node.js 22+. Clone the workspace, run your first Joomla or
+              WordPress sandbox, or add a new CMS adapter.
+            </p>
+
+            <div class="hero-actions cta-actions">
+              <a
+                class="btn btn-primary"
+                href="https://github.com/fellyph/cms-playground"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Explore on GitHub <span aria-hidden="true">→</span>
+              </a>
+              <a
+                class="btn btn-glass"
+                href="https://github.com/fellyph/cms-playground/blob/main/docs/BLUEPRINTS.md"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Read Blueprint docs
+              </a>
+            </div>
+
+            <div class="agent-strip">
+              <p class="agent-strip-label">Works with any shell-capable AI</p>
+              <ul class="agent-badges">
+                <li class="agent-badge" title="Claude Code">
+                  <span class="agent-squircle" aria-hidden="true">CC</span>
+                  <span>Claude Code</span>
+                </li>
+                <li class="agent-badge" title="Cursor">
+                  <span class="agent-squircle" aria-hidden="true">Cu</span>
+                  <span>Cursor</span>
+                </li>
+                <li class="agent-badge" title="Codex">
+                  <span class="agent-squircle" aria-hidden="true">Cx</span>
+                  <span>Codex</span>
+                </li>
+                <li class="agent-badge" title="Antigravity">
+                  <span class="agent-squircle" aria-hidden="true">Ag</span>
+                  <span>Antigravity</span>
+                </li>
+                <li class="agent-badge" title="Gemini CLI">
+                  <span class="agent-squircle" aria-hidden="true">Gm</span>
+                  <span>Gemini CLI</span>
+                </li>
+                <li class="agent-badge" title="Windsurf">
+                  <span class="agent-squircle" aria-hidden="true">Ws</span>
+                  <span>Windsurf</span>
+                </li>
+                <li class="agent-badge agent-badge-more">
+                  <span>+ any terminal agent</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <!-- Footer -->
+      <footer class="site-footer">
+        <div class="footer-grid">
+          <div class="footer-col">
+            <h3>CLI</h3>
+            <ul>
+              <li><a href="#top">Quick Start</a></li>
+              <li><a href="#prompts">Agent Prompts</a></li>
+              <li><a href="#builder">CLI &amp; Blueprint Builder</a></li>
+              <li><a href="#agent-rules">AGENTS.md Snippets</a></li>
+            </ul>
+          </div>
+          <div class="footer-col">
+            <h3>Adapters</h3>
+            <ul>
+              <li>
+                <a
+                  href="https://github.com/fellyph/cms-playground/tree/main/packages/joomla"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  @cms-playground/joomla
+                </a>
+              </li>
+              <li>
+                <a
+                  href="https://github.com/fellyph/cms-playground/tree/main/packages/wordpress"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  @cms-playground/wordpress
+                </a>
+              </li>
+              <li>
+                <a
+                  href="https://github.com/fellyph/cms-playground/blob/main/docs/ADAPTERS.md"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Write a CMS Adapter
+                </a>
+              </li>
+            </ul>
+          </div>
+          <div class="footer-col">
+            <h3>Documentation</h3>
+            <ul>
+              <li>
+                <a
+                  href="https://github.com/fellyph/cms-playground/blob/main/docs/GETTING-STARTED.md"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Getting Started
+                </a>
+              </li>
+              <li>
+                <a
+                  href="https://github.com/fellyph/cms-playground/blob/main/docs/BLUEPRINTS.md"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Blueprints Reference
+                </a>
+              </li>
+              <li>
+                <a
+                  href="https://github.com/fellyph/cms-playground/blob/main/ROADMAP.md"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Roadmap
+                </a>
+              </li>
+            </ul>
+          </div>
+          <div class="footer-col">
+            <h3>Project</h3>
+            <ul>
+              <li>
+                <a
+                  href="https://github.com/fellyph/cms-playground"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  GitHub Repository
+                </a>
+              </li>
+              <li>
+                <a
+                  href="https://github.com/fellyph/cms-playground/issues"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Issues &amp; Ideas
+                </a>
+              </li>
+              <li>
+                <a
+                  href="https://github.com/fellyph/cms-playground/pulls"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Pull Requests
+                </a>
+              </li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="footer-bottom">
+          <p>@cms-playground — Multi-CMS WebAssembly Playground CLI · GPL-2.0-or-later</p>
+          <p>Powered by <code>@php-wasm/node</code></p>
+        </div>
+      </footer>
+    </div>
+  </body>
+</html>
