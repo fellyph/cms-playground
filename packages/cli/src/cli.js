@@ -308,6 +308,10 @@ export async function run(argv = process.argv.slice(2)) {
       phpVersion: options.php,
       mountsBeforeInstall: options.mountsBeforeInstall,
       mounts: options.mounts,
+      autoMount: options.autoMount,
+      blueprintSource: options.blueprint,
+      verbosity: options.verbosity,
+      quiet: options.quiet,
       log: options.quiet ? () => {} : (msg) => console.error(msg),
     });
 

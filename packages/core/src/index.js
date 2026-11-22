@@ -1,5 +1,5 @@
 export { getAdapter, listAdapters, registerAdapter } from './adapter.js';
-export { CORE_STEPS, loadBlueprint, runBlueprint } from './blueprints.js';
+export { CORE_STEPS, loadBlueprint, resolveVfsPath, runBlueprint } from './blueprints.js';
 export { downloadToCache, fetchCachedBytes, getCacheDir } from './cache.js';
 export {
   DOCUMENT_ROOT,

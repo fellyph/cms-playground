@@ -3,7 +3,7 @@
 
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { runPhpCode, unpackZip } from './runtime.js';
 
 export const CORE_STEPS = {
@@ -28,28 +28,68 @@ export const CORE_STEPS = {
   },
 
   async unzip({ url, to = '' }, context) {
-    const resolvedUrl = new URL(url, context.baseUrl).href;
-    const response = await fetch(resolvedUrl, { redirect: 'follow' });
+    const resolved = new URL(url, context.baseUrl);
+    let bytes;
 
-    if (!response.ok) {
-      throw new Error(`Cannot download ${resolvedUrl}: HTTP ${response.status}`);
+    if (resolved.protocol === 'file:') {
+      let baseProtocol = null;
+      try {
+        baseProtocol = context.baseUrl ? new URL(context.baseUrl).protocol : null;
+      } catch {}
+
+      if (baseProtocol !== 'file:') {
+        throw new Error(`Cannot read local file URL "${resolved.href}" from a non-local blueprint`);
+      }
+
+      bytes = new Uint8Array(readFileSync(fileURLToPath(resolved)));
+    } else {
+      const response = await fetch(resolved.href, { redirect: 'follow' });
+
+      if (!response.ok) {
+        throw new Error(`Cannot download ${resolved.href}: HTTP ${response.status}`);
+      }
+
+      bytes = new Uint8Array(await response.arrayBuffer());
     }
 
-    const bytes = new Uint8Array(await response.arrayBuffer());
     const target = to ? resolveVfsPath(context.documentRoot, to) : context.documentRoot;
 
     await unpackZip(context.php, bytes, target);
   },
 };
 
-function resolveVfsPath(documentRoot, relativePath) {
-  const clean = String(relativePath).replace(/^\/+/, '');
+export function resolveVfsPath(documentRoot, relativePath) {
+  if (typeof relativePath !== 'string') {
+    throw new Error('Invalid path: expected a non-empty string');
+  }
+
+  if (relativePath.includes('\0') || relativePath.includes('\\')) {
+    throw new Error(`Invalid path "${relativePath}": backslashes and null bytes are not allowed`);
+  }
+
+  const clean = relativePath.replace(/^\/+/, '');
+
+  if (!clean) {
+    throw new Error(`Invalid path "${relativePath}": path must not be empty`);
+  }
 
   if (clean.split('/').includes('..')) {
     throw new Error(`Invalid path "${relativePath}": parent traversal is not allowed`);
   }
 
   return `${documentRoot}/${clean}`;
+}
+
+function validateBlueprint(blueprint, source) {
+  if (!blueprint || typeof blueprint !== 'object' || Array.isArray(blueprint)) {
+    throw new Error(`Invalid blueprint "${source}": expected a JSON object`);
+  }
+
+  if (blueprint.steps !== undefined && !Array.isArray(blueprint.steps)) {
+    throw new Error(`Invalid blueprint "${source}": "steps" must be an array`);
+  }
+
+  return blueprint;
 }
 
 /**
@@ -63,13 +103,13 @@ export async function loadBlueprint(source) {
       throw new Error(`Cannot fetch blueprint ${source}: HTTP ${response.status}`);
     }
 
-    const blueprint = await response.json();
+    const blueprint = validateBlueprint(await response.json(), source);
 
     return { blueprint, baseUrl: source };
   }
 
   const absPath = resolve(source);
-  const blueprint = JSON.parse(readFileSync(absPath, 'utf8'));
+  const blueprint = validateBlueprint(JSON.parse(readFileSync(absPath, 'utf8')), source);
 
   return { blueprint, baseUrl: pathToFileURL(dirname(absPath) + '/').href };
 }
