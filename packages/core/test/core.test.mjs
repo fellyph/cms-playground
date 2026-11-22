@@ -22,10 +22,11 @@ import {
   runPhpCode,
   startPlayground,
   unpackZip,
+  unregisterAdapter,
 } from '../src/index.js';
 
 describe('@cms-playground/core', () => {
-  it('registers and resolves adapters by name and alias', () => {
+  it('registers, resolves, and unregisters adapters by name and alias', () => {
     const dummy = {
       name: 'dummy',
       label: 'Dummy CMS',
@@ -40,9 +41,18 @@ describe('@cms-playground/core', () => {
     };
 
     registerAdapter(dummy);
-    assert.equal(getAdapter('dummy'), dummy);
-    assert.equal(getAdapter('DM'), dummy);
-    assert.ok(listAdapters().includes(dummy));
+    try {
+      assert.equal(getAdapter('dummy'), dummy);
+      assert.equal(getAdapter('DM'), dummy);
+      assert.ok(listAdapters().includes(dummy));
+    } finally {
+      unregisterAdapter('dummy');
+    }
+
+    assert.equal(getAdapter('dummy'), null);
+    assert.equal(getAdapter('DM'), null);
+    assert.equal(listAdapters().includes(dummy), false);
+    assert.throws(() => registerAdapter({ name: 'bad' }), /Invalid CMS adapter/);
   });
 
   it('parses host:vfs mount specs and rejects malformed ones', async () => {

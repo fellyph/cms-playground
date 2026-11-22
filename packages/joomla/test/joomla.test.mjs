@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import http from 'node:http';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
-import { bootPhp } from '@cms-playground/core';
+import { bootPhp, runPhpCode } from '@cms-playground/core';
 import { detectJoomlaAutoMount, joomlaAdapter, matchJoomlaVersion } from '../src/index.js';
 
 describe('@cms-playground/joomla', () => {
@@ -179,6 +180,123 @@ describe('@cms-playground/joomla', () => {
         `
       );
       assert.equal(res.text.trim(), 'VERIFIED');
+    } finally {
+      php.exit();
+    }
+  });
+
+  it('fetches, caches, and serves remote /media/* assets via serveStatic and returns null on 404 or non-media', async () => {
+    const cacheDir = mkdtempSync(join(tmpdir(), 'cms-pg-joomla-remote-static-'));
+    let remoteHits = 0;
+    const server = http.createServer((req, res) => {
+      if (req.url === '/joomla/6.2.0/media/system/js/core.js') {
+        remoteHits += 1;
+        res.statusCode = 200;
+        res.setHeader('content-type', 'application/javascript; charset=utf-8');
+        res.end('console.log("joomla");');
+        return;
+      }
+      res.statusCode = 404;
+      res.end('not found');
+    });
+    await new Promise((r) => server.listen(0, '127.0.0.1', r));
+    const mediaBaseUrl = `http://127.0.0.1:${server.address().port}/joomla/6.2.0/`;
+    const bundle = { version: '6.2.0', mediaBaseUrl };
+
+    try {
+      // Non-/media/ paths return null immediately
+      assert.equal(
+        await joomlaAdapter.serveStatic({ request: { url: '/index.php' }, bundle, cacheDir }),
+        null
+      );
+
+      // First /media/ request fetches from remote and caches to disk
+      const first = await joomlaAdapter.serveStatic({
+        request: { url: '/media/system/js/core.js' },
+        bundle,
+        cacheDir,
+      });
+      assert.equal(first.status, 200);
+      assert.equal(Buffer.from(first.body).toString('utf8'), 'console.log("joomla");');
+      assert.equal(remoteHits, 1);
+      assert.equal(existsSync(join(cacheDir, '6.2.0', 'media', 'system', 'js', 'core.js')), true);
+
+      // Second request is served from disk cache without hitting remote server
+      const second = await joomlaAdapter.serveStatic({
+        request: { url: '/media/system/js/core.js' },
+        bundle,
+        cacheDir,
+      });
+      assert.equal(second.status, 200);
+      assert.equal(remoteHits, 1);
+
+      // Remote 404 returns null (falls back to PHP-WASM)
+      assert.equal(
+        await joomlaAdapter.serveStatic({ request: { url: '/media/missing.css' }, bundle, cacheDir }),
+        null
+      );
+    } finally {
+      await new Promise((r) => {
+        server.close(() => r());
+        server.closeAllConnections?.();
+      });
+      rmSync(cacheDir, { recursive: true, force: true });
+    }
+  });
+
+  it('throws when configuration.php is missing and updates config paths without resetting password for --site', async () => {
+    const php = await bootPhp({ phpVersion: '8.4' });
+    const documentRoot = '/var/www/html';
+
+    try {
+      await assert.rejects(
+        () =>
+          joomlaAdapter.configure({
+            php,
+            documentRoot,
+            url: 'http://127.0.0.1:8790',
+            password: 'pw',
+            site: null,
+          }),
+        /configuration\.php not found/
+      );
+
+      php.writeFile(
+        `${documentRoot}/configuration.php`,
+        [
+          '<?php',
+          'class JConfig {',
+          "\tpublic $live_site = '';",
+          "\tpublic $tmp_path = '/old/tmp';",
+          "\tpublic $log_path = '/old/logs';",
+          "\tpublic $debug = false;",
+          "\tpublic $offset = 0;",
+          '}',
+        ].join('\n')
+      );
+
+      const info = await joomlaAdapter.configure({
+        php,
+        documentRoot,
+        url: 'http://127.0.0.1:9999',
+        password: 'pw',
+        site: '/tmp/local-site',
+      });
+      assert.equal(info.username, 'admin');
+      assert.equal(info.password, '(unchanged)');
+
+      const cfg = php.readFileAsText(`${documentRoot}/configuration.php`);
+      assert.ok(cfg.includes("public $live_site = 'http://127.0.0.1:9999';"));
+      assert.ok(cfg.includes("public $tmp_path = '/var/www/html/tmp';"));
+      assert.ok(cfg.includes("public $log_path = '/var/www/html/administrator/logs';"));
+
+      await joomlaAdapter.blueprintSteps.setGlobalConfig(
+        { values: { debug: true, offset: 42 } },
+        { php, documentRoot }
+      );
+      const updated = php.readFileAsText(`${documentRoot}/configuration.php`);
+      assert.ok(updated.includes('public $debug = true;'));
+      assert.ok(updated.includes('public $offset = 42;'));
     } finally {
       php.exit();
     }

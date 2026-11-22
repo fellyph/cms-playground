@@ -33,6 +33,22 @@ export function registerAdapter(adapter) {
 }
 
 /**
+ * Removes a registered adapter and all of its aliases.
+ */
+export function unregisterAdapter(name) {
+  const canonical = aliases.get(String(name).toLowerCase()) ?? name;
+  const removed = adapters.delete(canonical);
+
+  for (const [alias, target] of aliases.entries()) {
+    if (target === canonical) {
+      aliases.delete(alias);
+    }
+  }
+
+  return removed;
+}
+
+/**
  * Looks up an adapter by canonical name or alias.
  */
 export function getAdapter(nameOrAlias) {
