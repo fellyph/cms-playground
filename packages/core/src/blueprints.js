@@ -7,6 +7,29 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { EXIT_CODES, PlaygroundError, formatJsonPointer } from './errors.js';
 import { runPhpCode, unpackZip } from './runtime.js';
 
+export const CORE_STEP_SCHEMAS = Object.freeze({
+  runPHP: Object.freeze({
+    requiredFields: ['code'],
+    optionalFields: [],
+    description: 'Execute PHP code inside the site document root',
+  }),
+  writeFile: Object.freeze({
+    requiredFields: ['path', 'data'],
+    optionalFields: [],
+    description: 'Write a file relative to the site document root',
+  }),
+  mkdir: Object.freeze({
+    requiredFields: ['path'],
+    optionalFields: [],
+    description: 'Create a directory relative to the site document root',
+  }),
+  unzip: Object.freeze({
+    requiredFields: ['url'],
+    optionalFields: ['to'],
+    description: 'Download or read a zip archive and unpack it into the VFS',
+  }),
+});
+
 export const CORE_STEPS = {
   async runPHP({ code }, context) {
     if (typeof code !== 'string') {

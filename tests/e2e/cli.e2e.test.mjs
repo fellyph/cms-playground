@@ -748,4 +748,24 @@ describe('CLI E2E: --json receipts, agent mode, --cwd, and classified exit codes
       tmp.cleanup();
     }
   });
+
+  it('supports cms-playground map, map --json, and map --paths', async () => {
+    const mapRes = await runCliProcess(['map']);
+    assert.equal(mapRes.exitCode, 0, mapRes.stderr);
+    const mapPayload = JSON.parse(mapRes.stdout);
+    assert.ok(mapPayload.data.commands.some((c) => c.id === 'map'));
+    assert.ok(mapPayload.data.adapters.some((a) => a.name === 'joomla'));
+    assert.ok(mapPayload.data.blueprintSteps.some((s) => s.step === 'runPHP'));
+
+    const mapJsonRes = await runCliProcess(['map', '--json']);
+    assert.equal(mapJsonRes.exitCode, 0, mapJsonRes.stderr);
+    assert.deepEqual(JSON.parse(mapJsonRes.stdout.trim()), mapPayload);
+
+    const pathsRes = await runCliProcess(['map', '--paths']);
+    assert.equal(pathsRes.exitCode, 0, pathsRes.stderr);
+    const lines = pathsRes.stdout.trim().split('\n');
+    assert.ok(lines.includes('cms-playground start --joomla'));
+    assert.ok(lines.includes('cms-playground start --wp'));
+    assert.ok(lines.includes('cms-playground map --paths'));
+  });
 });
