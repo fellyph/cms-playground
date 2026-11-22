@@ -13,12 +13,18 @@ npx cms-playground start --joomla=5.4 --php=8.3 --port=8790
 npx cms-playground start --wp
 npx cms-playground start --wp=6.7 --php=8.4 --port=8791
 
-# Mount a local extension / plugin directory while developing
-npx cms-playground start --joomla --mount=./my-plugin:/var/www/html/plugins/system/myplugin
-npx cms-playground start --wp --mount=./my-plugin:/var/www/html/wp-content/plugins/my-plugin
+# Auto-detect and mount a local Joomla extension or WordPress plugin/theme
+npx cms-playground start --joomla --auto-mount
+npx cms-playground start --wp --auto-mount=./my-plugin
 
-# Run a Blueprint JSON (local file or URL)
+# Mount local folders explicitly (before or after CMS configure)
+npx cms-playground start --joomla --mount=./my-plugin:/var/www/html/plugins/system/myplugin
+npx cms-playground start --joomla --mount-before-install=./overlay:/var/www/html/overlay
+
+# Run a Blueprint (interactive, headless, or export as a .zip snapshot)
 npx cms-playground start --joomla --blueprint=./blueprint.json
+npx cms-playground run-blueprint --joomla --blueprint=./blueprint.json
+npx cms-playground build-snapshot --joomla --blueprint=./blueprint.json --output=./snapshot.zip
 
 # Run Joomla's own CLI (cli/joomla.php) without local PHP
 npx cms-playground cli --joomla -- user:list
@@ -36,9 +42,9 @@ npx cms-playground list
 
 ## Workspace Structure
 
-- [`packages/core`](packages/core) (`@cms-playground/core`): Shared `@php-wasm/node` bootstrap, request serialization queue, HTTP server, bundle cache (`~/.cache/cms-playground`), `NODEFS` mounts, and base Blueprint runner.
-- [`packages/joomla`](packages/joomla) (`@cms-playground/joomla`): Joomla adapter using pre-installed SQLite bundles from `joomla-projects/joomla-playground`, on-demand `/media/*` static caching, SEF rewrites, and `cli/joomla.php` support.
-- [`packages/wordpress`](packages/wordpress) (`@cms-playground/wordpress`): WordPress adapter using official WordPress zips + `sqlite-database-integration`, auto-install on SQLite, and WordPress blueprint steps.
+- [`packages/core`](packages/core) (`@cms-playground/core`): Shared `@php-wasm/node` bootstrap, request serialization queue, HTTP server, bundle cache (`~/.cache/cms-playground`), `NODEFS` mounts, snapshot packer, and base Blueprint runner.
+- [`packages/joomla`](packages/joomla) (`@cms-playground/joomla`): Joomla adapter using pre-installed SQLite bundles from `joomla-projects/joomla-playground`, on-demand `/media/*` static caching, SEF rewrites, XML `--auto-mount`, and `cli/joomla.php` support.
+- [`packages/wordpress`](packages/wordpress) (`@cms-playground/wordpress`): WordPress adapter using official WordPress zips + `sqlite-database-integration`, auto-install on SQLite, plugin/theme `--auto-mount`, and WordPress blueprint steps.
 - [`packages/cli`](packages/cli) (`@cms-playground/cli`): Unified CLI entrypoint (`cms-playground`).
 
 ## Testing
@@ -47,4 +53,4 @@ npx cms-playground list
 npm test
 ```
 
-The test suite verifies all package unit tests, a live PHP 8.4 WebAssembly HTTP server test, and automated documentation tests (`tests/docs.test.mjs`) that validate every CLI command, Blueprint JSON example, and Markdown link in the docs.
+The test suite verifies all package unit tests, live PHP 8.4 WebAssembly HTTP/Blueprint/snapshot tests, and automated documentation tests (`tests/docs.test.mjs`) that validate every CLI command, Blueprint JSON example, and Markdown link in the docs.

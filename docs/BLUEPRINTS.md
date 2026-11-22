@@ -2,11 +2,13 @@
 
 A **Blueprint** is a JSON file describing how to configure a CMS playground automatically after boot. Blueprints combine **core steps** (available for every CMS) with **adapter-specific steps** (for Joomla or WordPress).
 
-Pass a Blueprint to `start` using `--blueprint`:
+Blueprints can be run with `start` (interactive server), `run-blueprint` (headless CI/automation), or `build-snapshot` (export a `.zip` after running):
 
 ```bash
 npx cms-playground start --joomla --blueprint=./blueprint.json
 npx cms-playground start --wp --blueprint=./wp-blueprint.json
+npx cms-playground run-blueprint --joomla --blueprint=./blueprint.json
+npx cms-playground build-snapshot --joomla --blueprint=./blueprint.json --output=./site.zip
 ```
 
 ---

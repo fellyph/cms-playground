@@ -54,13 +54,27 @@ npx cms-playground start --wp=6.7 --php=8.4 --port=8791
 npx cms-playground start --wordpress=6.7 --port=8792
 ```
 
-### Mount local code while developing
+### Auto-mount a local extension, plugin, or theme
 
-Use `--mount=<hostPath>:<vfsPath>` (repeatable) to mount local extension, plugin, or theme folders directly into `/var/www/html`:
+Use `--auto-mount` (defaults to the current working directory) or `--auto-mount=<dir>` to automatically detect, mount, and register/activate your project:
+
+- **Joomla:** scans for an extension XML manifest (`plugin`, `module`, `template`, or `component`), mounts it into `/var/www/html/...`, and runs `cli/joomla.php extension:discover:install`.
+- **WordPress:** detects a theme (`style.css`), plugin (`Plugin Name:` header), or `wp-content/` folder, mounts it into `wp-content/`, and switches the theme or activates the plugin.
+
+```bash
+npx cms-playground start --joomla --auto-mount
+npx cms-playground start --joomla --auto-mount=./my-joomla-plugin
+npx cms-playground start --wp --auto-mount=./my-wp-plugin
+```
+
+### Mount local folders explicitly
+
+Use `--mount=<hostPath>:<vfsPath>` (mounted after CMS configuration) or `--mount-before-install=<hostPath>:<vfsPath>` (mounted before CMS configuration, e.g. for custom DB drop-ins or config overlays). Both flags are repeatable:
 
 ```bash
 npx cms-playground start --joomla --mount=./my-plugin:/var/www/html/plugins/system/myplugin
 npx cms-playground start --wp --mount=./my-plugin:/var/www/html/wp-content/plugins/my-plugin
+npx cms-playground start --joomla --mount-before-install=./overlay:/var/www/html/overlay
 ```
 
 ### Use an existing local site directory
@@ -71,16 +85,29 @@ Use `--site=<dir>` to mount a persistent local directory instead of unpacking an
 npx cms-playground start --joomla --site=./my-joomla-site --port=8790
 ```
 
-### Run a Blueprint on boot
+### Run a Blueprint (server or headless)
 
 Pass a local JSON file or remote URL with `--blueprint`:
 
 ```bash
+# Start a server after running a Blueprint
 npx cms-playground start --joomla --blueprint=./blueprint.json
 npx cms-playground start --wp --blueprint=https://example.org/blueprint.json
+
+# Run a Blueprint headlessly (no HTTP server — ideal for CI)
+npx cms-playground run-blueprint --joomla --blueprint=./blueprint.json --verbosity=debug
 ```
 
 See [Blueprints](BLUEPRINTS.md) for all supported steps and examples.
+
+### Build a portable `.zip` snapshot
+
+Use `build-snapshot` to boot a CMS, optionally run a Blueprint, and export `/var/www/html` as a `.zip` archive:
+
+```bash
+npx cms-playground build-snapshot --joomla --blueprint=./blueprint.json --output=./snapshot.zip
+npx cms-playground build-snapshot --wp --output=./wp-snapshot.zip --verbosity=quiet
+```
 
 ### Run Joomla's native CLI (`cli/joomla.php`)
 
@@ -98,6 +125,8 @@ npx cms-playground cli --joomla --site=./my-joomla-site -- cache:clean
 | Command | Description |
 |---|---|
 | `start` | Boot a CMS in PHP-WASM and start a local HTTP server |
+| `run-blueprint` | Run a Blueprint headlessly without starting an HTTP server |
+| `build-snapshot` | Boot a CMS, optionally run a Blueprint, and export a `.zip` snapshot |
 | `cli` | Run the CMS's native CLI (e.g. `cli/joomla.php`) in PHP-WASM |
 | `list` | Show registered CMS adapters and supported PHP versions |
 
@@ -110,8 +139,12 @@ npx cms-playground cli --joomla --site=./my-joomla-site -- cache:clean
 | `--host=<address>` | `127.0.0.1` | Local bind address |
 | `--site=<dir>` | *(ephemeral)* | Mount an existing local site directory |
 | `--blueprint=<src>` | *(none)* | Blueprint JSON file path or HTTP(S) URL |
-| `--mount=<host:vfs>` | *(none)* | Mount a host folder into VFS (repeatable) |
-| `--quiet` | `false` | Suppress request and progress logs |
+| `--output=<path>` | *(none)* | Output `.zip` path for `build-snapshot` |
+| `--mount=<host:vfs>` | *(none)* | Mount a host folder into VFS after configure (repeatable) |
+| `--mount-before-install=<host:vfs>` | *(none)* | Mount a host folder into VFS before configure (repeatable) |
+| `--auto-mount[=<dir>]` | *(off)* | Auto-detect and mount a Joomla extension or WP plugin/theme (default: CWD) |
+| `--verbosity=<level>` | `normal` | Logging level: `quiet`, `normal`, or `debug` |
+| `--quiet` | `false` | Alias for `--verbosity=quiet` |
 | `-h`, `--help` | — | Show CLI help text |
 
 ---

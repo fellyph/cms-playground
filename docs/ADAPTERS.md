@@ -7,7 +7,7 @@
 ## Adapter Interface
 
 ```js
-import { registerAdapter } from '@cms-playground/core';
+import { DOCUMENT_ROOT, registerAdapter } from '@cms-playground/core';
 
 export const myCmsAdapter = {
   // Required metadata
@@ -42,7 +42,18 @@ export const myCmsAdapter = {
     return null;
   },
 
-  // 5. Optional CMS-specific Blueprint steps
+  // 5. Optional --auto-mount detector (returns { kind, mounts, postMount? } or null)
+  detectAutoMount(dir) {
+    return {
+      kind: 'mycms-plugin',
+      mounts: [{ hostPath: dir, vfsPath: `${DOCUMENT_ROOT}/plugins/my-plugin` }],
+      async postMount({ php, documentRoot, log }) {
+        log?.('Activating plugin...');
+      },
+    };
+  },
+
+  // 6. Optional CMS-specific Blueprint steps
   blueprintSteps: {
     async setTitle({ title }, context) {
       await context.runPhp(`file_put_contents('title.txt', ${JSON.stringify(title)});`);
@@ -57,5 +68,5 @@ registerAdapter(myCmsAdapter);
 
 ## Built-in Adapters
 
-- **Joomla** ([`packages/joomla/src/index.js`](../packages/joomla/src/index.js)): Pre-installed SQLite bundles from `joomla-projects/joomla-playground`, on-demand `/media/*` caching, SEF URL rewrites, and `cli/joomla.php` passthrough.
-- **WordPress** ([`packages/wordpress/src/index.js`](../packages/wordpress/src/index.js)): Official WordPress zips paired with `sqlite-database-integration`, automatic `wp_install()`, pretty permalink rewrites, and WordPress blueprint steps.
+- **Joomla** ([`packages/joomla/src/index.js`](../packages/joomla/src/index.js)): Pre-installed SQLite bundles from `joomla-projects/joomla-playground`, on-demand `/media/*` caching, SEF URL rewrites, XML manifest `--auto-mount`, and `cli/joomla.php` passthrough.
+- **WordPress** ([`packages/wordpress/src/index.js`](../packages/wordpress/src/index.js)): Official WordPress zips paired with `sqlite-database-integration`, automatic `wp_install()`, pretty permalink rewrites, plugin/theme/`wp-content` `--auto-mount`, and WordPress blueprint steps.

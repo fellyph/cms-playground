@@ -63,7 +63,7 @@ describe('Documentation verification', () => {
   });
 
   it('all CLI example commands in README.md and docs/*.md parse cleanly with parseCliArgs()', () => {
-    const validCommands = new Set(['start', 'cli', 'list']);
+    const validCommands = new Set(['start', 'run-blueprint', 'build-snapshot', 'cli', 'list']);
     let checked = 0;
 
     for (const file of DOC_FILES) {
@@ -104,7 +104,7 @@ describe('Documentation verification', () => {
       }
     }
 
-    assert.ok(checked >= 10, `Expected to validate at least 10 CLI examples, found ${checked}`);
+    assert.ok(checked >= 15, `Expected to validate at least 15 CLI examples, found ${checked}`);
   });
 
   it('all Blueprint JSON examples in docs/BLUEPRINTS.md are valid JSON with real step names', () => {
@@ -138,7 +138,25 @@ describe('Documentation verification', () => {
     const listOut = execFileSync(process.execPath, [CLI_BIN, 'list'], { encoding: 'utf8' });
     const gettingStarted = readFileSync(join(ROOT, 'docs/GETTING-STARTED.md'), 'utf8');
 
-    for (const token of ['start', 'cli', 'list', '--joomla', '--wp', '--php', '--port', '--site', '--blueprint', '--mount', '--quiet']) {
+    for (const token of [
+      'start',
+      'run-blueprint',
+      'build-snapshot',
+      'cli',
+      'list',
+      '--joomla',
+      '--wp',
+      '--php',
+      '--port',
+      '--site',
+      '--blueprint',
+      '--output',
+      '--mount',
+      '--mount-before-install',
+      '--auto-mount',
+      '--verbosity',
+      '--quiet',
+    ]) {
       assert.ok(helpOut.includes(token), `CLI --help missing "${token}"`);
       assert.ok(gettingStarted.includes(token), `docs/GETTING-STARTED.md missing "${token}"`);
     }
