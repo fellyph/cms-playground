@@ -19,6 +19,8 @@ const DOC_FILES = [
   ...readdirSync(join(ROOT, 'docs'))
     .filter((f) => f.endsWith('.md'))
     .map((f) => join(ROOT, 'docs', f)),
+  join(ROOT, 'packages/cli/skills/cms-playground/SKILL.md'),
+  join(ROOT, 'packages/cli/skills/cms-playground/references/blueprints.md'),
 ];
 
 function extractCodeBlocks(markdown, langPattern) {
@@ -107,30 +109,48 @@ describe('Documentation verification', () => {
     assert.ok(checked >= 15, `Expected to validate at least 15 CLI examples, found ${checked}`);
   });
 
-  it('all Blueprint JSON examples in docs/BLUEPRINTS.md are valid JSON with real step names', () => {
-    const blueprintsDoc = join(ROOT, 'docs/BLUEPRINTS.md');
-    const content = readFileSync(blueprintsDoc, 'utf8');
-    const jsonBlocks = extractCodeBlocks(content, /^json$/i);
+  it('all Blueprint JSON examples in docs/BLUEPRINTS.md and bundled skill reference are valid JSON with real step names', () => {
+    const blueprintDocs = [
+      join(ROOT, 'docs/BLUEPRINTS.md'),
+      join(ROOT, 'packages/cli/skills/cms-playground/references/blueprints.md'),
+    ];
     const knownSteps = new Set([
       ...Object.keys(CORE_STEPS),
       ...Object.keys(joomlaAdapter.blueprintSteps ?? {}),
       ...Object.keys(wordpressAdapter.blueprintSteps ?? {}),
     ]);
+    let totalBlocks = 0;
 
-    assert.ok(jsonBlocks.length >= 3, `Expected at least 3 Blueprint JSON examples, found ${jsonBlocks.length}`);
+    for (const blueprintsDoc of blueprintDocs) {
+      const content = readFileSync(blueprintsDoc, 'utf8');
+      const jsonBlocks = extractCodeBlocks(content, /^json$/i);
 
-    for (const [idx, block] of jsonBlocks.entries()) {
-      const parsed = JSON.parse(block);
+      assert.ok(jsonBlocks.length >= 1, `Expected at least 1 Blueprint JSON example in ${blueprintsDoc}`);
+      totalBlocks += jsonBlocks.length;
 
-      assert.ok(Array.isArray(parsed.steps), `Blueprint JSON block #${idx + 1} must have a steps array`);
+      for (const [idx, block] of jsonBlocks.entries()) {
+        const parsed = JSON.parse(block);
 
-      for (const step of parsed.steps) {
-        assert.ok(
-          knownSteps.has(step.step),
-          `Blueprint JSON block #${idx + 1} uses unknown step "${step.step}". Known: ${Array.from(knownSteps).join(', ')}`
-        );
+        assert.ok(Array.isArray(parsed.steps), `${blueprintsDoc} JSON block #${idx + 1} must have a steps array`);
+
+        for (const step of parsed.steps) {
+          assert.ok(
+            knownSteps.has(step.step),
+            `${blueprintsDoc} JSON block #${idx + 1} uses unknown step "${step.step}". Known: ${Array.from(knownSteps).join(', ')}`
+          );
+
+          if ((step.step === 'writeFile' || step.step === 'mkdir') && typeof step.path === 'string') {
+            assert.equal(
+              step.path.startsWith('/var/www/html'),
+              false,
+              `${blueprintsDoc} JSON block #${idx + 1} ${step.step} path "${step.path}" should be relative to /var/www/html`
+            );
+          }
+        }
       }
     }
+
+    assert.ok(totalBlocks >= 4, `Expected at least 4 Blueprint JSON examples across docs, found ${totalBlocks}`);
   });
 
   it('live CLI --help and list output match documented commands and CMS flags', () => {
@@ -143,6 +163,7 @@ describe('Documentation verification', () => {
       'run-blueprint',
       'build-snapshot',
       'cli',
+      'setup',
       'list',
       '--joomla',
       '--wp',
@@ -156,6 +177,12 @@ describe('Documentation verification', () => {
       '--auto-mount',
       '--verbosity',
       '--quiet',
+      '--agent',
+      '--project',
+      '--yes',
+      '--skip-mcp',
+      '--dry-run',
+      '--force',
     ]) {
       assert.ok(helpOut.includes(token), `CLI --help missing "${token}"`);
       assert.ok(gettingStarted.includes(token), `docs/GETTING-STARTED.md missing "${token}"`);
