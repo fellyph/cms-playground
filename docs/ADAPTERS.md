@@ -1,0 +1,61 @@
+# Writing a CMS Adapter
+
+`@cms-playground/core` is CMS-agnostic. Each CMS (`@cms-playground/joomla`, `@cms-playground/wordpress`, or your own adapter) implements a small adapter object and registers it with `registerAdapter()`.
+
+---
+
+## Adapter Interface
+
+```js
+import { registerAdapter } from '@cms-playground/core';
+
+export const myCmsAdapter = {
+  // Required metadata
+  name: 'mycms',                 // Canonical CLI flag: --mycms
+  label: 'MyCMS',                // Display name in logs and `list`
+  aliases: ['mycms', 'mc'],      // Optional extra CLI flag aliases
+  defaultPhp: '8.4',
+  supportedPhp: ['8.3', '8.4'],
+  defaultVersion: 'latest',
+  adminPath: '/admin/',
+
+  // Optional native CLI entrypoint relative to /var/www/html
+  cliEntrypoint: 'bin/console',
+
+  // 1. Download/cache the CMS bundle (returns { version, zipBytes, extractTo? })
+  async resolveBundle({ version, cacheDir, log }) {
+    return { version: version || 'latest', zipBytes: null };
+  },
+
+  // 2. Configure the CMS inside PHP-WASM (config files, DB setup, admin password)
+  async configure({ php, documentRoot, url, password, site, bundle, log }) {
+    return { username: 'admin', password };
+  },
+
+  // 3. URL rewrite rules for PHPRequestHandler
+  getFileNotFoundAction(relativePath) {
+    return { type: 'internal-redirect', uri: '/index.php' };
+  },
+
+  // 4. Optional static asset handler (return { status, headers, body } or null to fall back to PHP)
+  async serveStatic({ request, bundle, cacheDir }) {
+    return null;
+  },
+
+  // 5. Optional CMS-specific Blueprint steps
+  blueprintSteps: {
+    async setTitle({ title }, context) {
+      await context.runPhp(`file_put_contents('title.txt', ${JSON.stringify(title)});`);
+    },
+  },
+};
+
+registerAdapter(myCmsAdapter);
+```
+
+---
+
+## Built-in Adapters
+
+- **Joomla** ([`packages/joomla/src/index.js`](../packages/joomla/src/index.js)): Pre-installed SQLite bundles from `joomla-projects/joomla-playground`, on-demand `/media/*` caching, SEF URL rewrites, and `cli/joomla.php` passthrough.
+- **WordPress** ([`packages/wordpress/src/index.js`](../packages/wordpress/src/index.js)): Official WordPress zips paired with `sqlite-database-integration`, automatic `wp_install()`, pretty permalink rewrites, and WordPress blueprint steps.
