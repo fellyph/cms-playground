@@ -131,4 +131,56 @@ describe('@cms-playground/joomla', () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  it('reads $dbprefix dynamically from configuration.php when resetting admin password', async () => {
+    const php = await bootPhp({ phpVersion: '8.4' });
+    const documentRoot = '/var/www/html';
+
+    try {
+      php.mkdir(`${documentRoot}/data`);
+      php.writeFile(
+        `${documentRoot}/configuration.php`,
+        [
+          '<?php',
+          'class JConfig {',
+          "\tpublic $dbprefix = 'custom_';",
+          "\tpublic $live_site = '';",
+          "\tpublic $tmp_path = '';",
+          "\tpublic $log_path = '';",
+          '}',
+        ].join('\n')
+      );
+
+      // Create SQLite database with custom_users table
+      const { runPhpCode } = await import('@cms-playground/core');
+      await runPhpCode(
+        php,
+        `
+        $db = new PDO('sqlite:${documentRoot}/data/joomla.sqlite');
+        $db->exec("CREATE TABLE custom_users (username TEXT, password TEXT)");
+        $db->exec("INSERT INTO custom_users (username, password) VALUES ('admin', 'old-hash')");
+        `
+      );
+
+      await joomlaAdapter.configure({
+        php,
+        documentRoot,
+        url: 'http://127.0.0.1:8790',
+        password: 'new-secret-password',
+        site: null,
+      });
+
+      const res = await runPhpCode(
+        php,
+        `
+        $db = new PDO('sqlite:${documentRoot}/data/joomla.sqlite');
+        $hash = $db->query("SELECT password FROM custom_users WHERE username = 'admin'")->fetchColumn();
+        echo password_verify('new-secret-password', $hash) ? 'VERIFIED' : 'FAILED';
+        `
+      );
+      assert.equal(res.text.trim(), 'VERIFIED');
+    } finally {
+      php.exit();
+    }
+  });
 });

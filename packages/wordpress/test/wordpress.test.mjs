@@ -74,4 +74,64 @@ describe('@cms-playground/wordpress', () => {
       rmSync(root, { recursive: true, force: true });
     }
   });
+
+  it('cleans up /tmp/wp-extract, generates auth salts, and avoids trailing colon in HTTP_HOST', async () => {
+    const php = await bootPhp({ phpVersion: '8.4' });
+    const documentRoot = '/var/www/html';
+
+    try {
+      // Simulate extracted WordPress archive under /tmp/wp-extract/wordpress
+      php.mkdir('/tmp/wp-extract/wordpress/wp-admin/includes');
+      php.writeFile(
+        '/tmp/wp-extract/wordpress/wp-load.php',
+        `<?php
+        define('ABSPATH', __DIR__ . '/');
+        file_put_contents('/tmp/captured-server.json', json_encode([
+            'HTTP_HOST' => $_SERVER['HTTP_HOST'],
+            'SERVER_NAME' => $_SERVER['SERVER_NAME'],
+            'SERVER_PORT' => $_SERVER['SERVER_PORT'],
+        ]));
+        `
+      );
+      php.writeFile(
+        '/tmp/wp-extract/wordpress/wp-admin/includes/upgrade.php',
+        '<?php function is_blog_installed() { return true; }'
+      );
+
+      await wordpressAdapter.configure({
+        php,
+        documentRoot,
+        url: 'https://example.test',
+        password: 'secret-password',
+        site: null,
+        bundle: {},
+      });
+
+      // /tmp/wp-extract should be removed
+      assert.equal(php.fileExists('/tmp/wp-extract'), false);
+
+      // Generated wp-config.php should contain all 8 non-empty auth keys & salts
+      const wpConfig = php.readFileAsText(`${documentRoot}/wp-config.php`);
+      for (const key of [
+        'AUTH_KEY',
+        'SECURE_AUTH_KEY',
+        'LOGGED_IN_KEY',
+        'NONCE_KEY',
+        'AUTH_SALT',
+        'SECURE_AUTH_SALT',
+        'LOGGED_IN_SALT',
+        'NONCE_SALT',
+      ]) {
+        assert.match(wpConfig, new RegExp(`define\\('${key}', "[0-9a-f]{64}"\\);`));
+      }
+
+      // HTTP_HOST must not have a trailing colon and SERVER_PORT defaults to 443 for https
+      const serverVars = JSON.parse(php.readFileAsText('/tmp/captured-server.json'));
+      assert.equal(serverVars.HTTP_HOST, 'example.test');
+      assert.equal(serverVars.SERVER_NAME, 'example.test');
+      assert.equal(serverVars.SERVER_PORT, '443');
+    } finally {
+      php.exit();
+    }
+  });
 });

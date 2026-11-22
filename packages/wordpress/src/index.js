@@ -1,6 +1,7 @@
 // WordPress adapter for @cms-playground.
 // Downloads official WordPress + WordPress/sqlite-database-integration and installs on SQLite inside PHP-WASM.
 
+import { randomBytes } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 import { DOCUMENT_ROOT, fetchCachedBytes, runPhpCode, unpackZip } from '@cms-playground/core';
@@ -139,6 +140,18 @@ export const wordpressAdapter = {
                 rename($item->getPathname(), $target);
             }
         }
+        $rmIt = new RecursiveIteratorIterator(
+            new RecursiveDirectoryIterator('/tmp/wp-extract', RecursiveDirectoryIterator::SKIP_DOTS),
+            RecursiveIteratorIterator::CHILD_FIRST
+        );
+        foreach ($rmIt as $item) {
+            if ($item->isDir()) {
+                @rmdir($item->getPathname());
+            } else {
+                @unlink($item->getPathname());
+            }
+        }
+        @rmdir('/tmp/wp-extract');
         `
       );
     }
@@ -166,6 +179,20 @@ export const wordpressAdapter = {
 
     // Generate wp-config.php if missing, and point WP_HOME / WP_SITEURL at the local server URL.
     if (!php.fileExists(`${documentRoot}/wp-config.php`)) {
+      const saltNames = [
+        'AUTH_KEY',
+        'SECURE_AUTH_KEY',
+        'LOGGED_IN_KEY',
+        'NONCE_KEY',
+        'AUTH_SALT',
+        'SECURE_AUTH_SALT',
+        'LOGGED_IN_SALT',
+        'NONCE_SALT',
+      ];
+      const salts = saltNames
+        .map((name) => `define('${name}', ${JSON.stringify(randomBytes(32).toString('hex'))});`)
+        .join('\n');
+
       const wpConfig = `<?php
 define('DB_NAME', 'wordpress');
 define('DB_USER', 'root');
@@ -173,6 +200,7 @@ define('DB_PASSWORD', '');
 define('DB_HOST', 'localhost');
 define('DB_CHARSET', 'utf8');
 define('DB_COLLATE', '');
+${salts}
 define('WP_HOME', ${JSON.stringify(url)});
 define('WP_SITEURL', ${JSON.stringify(url)});
 define('WP_DEBUG', false);
@@ -194,10 +222,14 @@ require_once ABSPATH . 'wp-settings.php';
         `
         $cfg = json_decode(file_get_contents('/tmp/wp-install.json'), true);
         unlink('/tmp/wp-install.json');
-        $_SERVER['HTTP_HOST'] = parse_url($cfg['url'], PHP_URL_HOST) . ':' . parse_url($cfg['url'], PHP_URL_PORT);
+        $parts = parse_url($cfg['url']);
+        $host = $parts['host'] ?? '127.0.0.1';
+        $scheme = strtolower($parts['scheme'] ?? 'http');
+        $port = $parts['port'] ?? null;
+        $_SERVER['HTTP_HOST'] = $port !== null ? ($host . ':' . $port) : $host;
         $_SERVER['REQUEST_URI'] = '/';
-        $_SERVER['SERVER_NAME'] = parse_url($cfg['url'], PHP_URL_HOST);
-        $_SERVER['SERVER_PORT'] = (string) parse_url($cfg['url'], PHP_URL_PORT);
+        $_SERVER['SERVER_NAME'] = $host;
+        $_SERVER['SERVER_PORT'] = (string) ($port ?? ($scheme === 'https' ? 443 : 80));
         define('WP_INSTALLING', true);
         require_once $cfg['root'] . '/wp-load.php';
         require_once ABSPATH . 'wp-admin/includes/upgrade.php';
