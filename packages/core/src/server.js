@@ -1,8 +1,8 @@
-// Core HTTP server & CMS CLI runner backed by @php-wasm/node.
+// Core HTTP server, headless Blueprint runner, snapshot builder, and CMS CLI runner backed by @php-wasm/node.
 
 import http from 'node:http';
-import { existsSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
 import { PHPRequestHandler } from '@php-wasm/universal';
 import { createNodeFsMountHandler } from '@php-wasm/node';
 import { loadBlueprint, runBlueprint } from './blueprints.js';
@@ -12,30 +12,37 @@ import {
   bootPhp,
   createRequestQueue,
   mountDirectories,
+  packZip,
   randomPassword,
   runPhpCode,
   unpackZip,
 } from './runtime.js';
 
 /**
- * Boots a CMS adapter in PHP-WASM and serves it over HTTP on localhost.
+ * Shared site bootstrap: loads blueprint (if any), boots PHP-WASM, mounts/unpacks the CMS,
+ * applies mountsBeforeInstall -> adapter.configure() -> mounts -> blueprint steps.
  */
-export async function startPlayground({
+async function bootSite({
   adapter,
   version = null,
   phpVersion = null,
-  port = 8790,
-  host = '127.0.0.1',
+  url = 'http://127.0.0.1:8790',
   site = null,
+  mountsBeforeInstall = [],
   mounts = [],
   autoMount = null,
   blueprintSource = null,
+  verbosity = 'normal',
   quiet = false,
   log = (msg) => console.log(msg),
-} = {}) {
+}) {
   if (!adapter) {
     throw new Error('A CMS adapter is required');
   }
+
+  const effectiveVerbosity = quiet ? 'quiet' : verbosity;
+  const statusLog = effectiveVerbosity === 'quiet' ? () => {} : log;
+  const debugLog = effectiveVerbosity === 'debug' ? log : () => {};
 
   let loadedBlueprint = null;
 
@@ -57,9 +64,7 @@ export async function startPlayground({
     );
   }
 
-  const url = `http://${host}:${port}`;
   const password = randomPassword();
-  const statusLog = quiet ? () => {} : log;
 
   let detectedAutoMount = null;
 
@@ -104,10 +109,9 @@ export async function startPlayground({
 
   php.chdir(DOCUMENT_ROOT);
 
-  const allMounts = [...(detectedAutoMount?.mounts ?? []), ...mounts];
-
-  if (allMounts.length > 0) {
-    await mountDirectories(php, allMounts);
+  if (mountsBeforeInstall.length > 0) {
+    debugLog(`Mounting ${mountsBeforeInstall.length} pre-install director${mountsBeforeInstall.length === 1 ? 'y' : 'ies'}...`);
+    await mountDirectories(php, mountsBeforeInstall);
   }
 
   statusLog(`Configuring ${adapter.label}...`);
@@ -120,6 +124,13 @@ export async function startPlayground({
     bundle,
     log: statusLog,
   })) ?? {};
+
+  const postInstallMounts = [...(detectedAutoMount?.mounts ?? []), ...mounts];
+
+  if (postInstallMounts.length > 0) {
+    debugLog(`Mounting ${postInstallMounts.length} director${postInstallMounts.length === 1 ? 'y' : 'ies'}...`);
+    await mountDirectories(php, postInstallMounts);
+  }
 
   if (typeof detectedAutoMount?.postMount === 'function') {
     await detectedAutoMount.postMount({ php, documentRoot: DOCUMENT_ROOT, url, log: statusLog });
@@ -148,6 +159,64 @@ export async function startPlayground({
       adapter.blueprintSteps ?? {}
     );
   }
+
+  return {
+    php,
+    handler,
+    bundle,
+    info,
+    password,
+    loadedBlueprint,
+    effectivePhp: String(effectivePhp),
+    effectiveVersion,
+    statusLog,
+    debugLog,
+  };
+}
+
+/**
+ * Boots a CMS adapter in PHP-WASM and serves it over HTTP on localhost.
+ */
+export async function startPlayground({
+  adapter,
+  version = null,
+  phpVersion = null,
+  port = 8790,
+  host = '127.0.0.1',
+  site = null,
+  mountsBeforeInstall = [],
+  mounts = [],
+  autoMount = null,
+  blueprintSource = null,
+  verbosity = 'normal',
+  quiet = false,
+  log = (msg) => console.log(msg),
+} = {}) {
+  const initialUrl = `http://${host}:${port}`;
+  const {
+    php,
+    handler,
+    bundle,
+    info,
+    password,
+    loadedBlueprint,
+    effectivePhp,
+    effectiveVersion,
+    statusLog,
+  } = await bootSite({
+    adapter,
+    version,
+    phpVersion,
+    url: initialUrl,
+    site,
+    mountsBeforeInstall,
+    mounts,
+    autoMount,
+    blueprintSource,
+    verbosity,
+    quiet,
+    log,
+  });
 
   const serialized = createRequestQueue();
 
@@ -228,7 +297,7 @@ export async function startPlayground({
     username: info.username ?? 'admin',
     password: info.password ?? password,
     version: bundle?.version ?? effectiveVersion,
-    phpVersion: String(effectivePhp),
+    phpVersion: effectivePhp,
     php,
     close: () =>
       new Promise((done) => {
@@ -244,6 +313,110 @@ export async function startPlayground({
 }
 
 /**
+ * Runs a Blueprint headlessly against a CMS adapter without starting an HTTP server.
+ */
+export async function runBlueprintHeadless({
+  adapter,
+  blueprintSource,
+  version = null,
+  phpVersion = null,
+  site = null,
+  mountsBeforeInstall = [],
+  mounts = [],
+  autoMount = null,
+  verbosity = 'normal',
+  quiet = false,
+  log = (msg) => console.log(msg),
+}) {
+  if (!blueprintSource) {
+    throw new Error('A --blueprint file or URL is required for run-blueprint');
+  }
+
+  const booted = await bootSite({
+    adapter,
+    version,
+    phpVersion,
+    site,
+    mountsBeforeInstall,
+    mounts,
+    autoMount,
+    blueprintSource,
+    verbosity,
+    quiet,
+    log,
+  });
+
+  try {
+    return {
+      version: booted.bundle?.version ?? booted.effectiveVersion,
+      phpVersion: booted.effectivePhp,
+      stepsRun: booted.loadedBlueprint?.blueprint?.steps?.length ?? 0,
+    };
+  } finally {
+    try {
+      booted.php.exit();
+    } catch {}
+  }
+}
+
+/**
+ * Boots a CMS, optionally runs a Blueprint, and exports DOCUMENT_ROOT as a portable zip snapshot.
+ */
+export async function buildSnapshot({
+  adapter,
+  outputPath,
+  blueprintSource = null,
+  version = null,
+  phpVersion = null,
+  site = null,
+  mountsBeforeInstall = [],
+  mounts = [],
+  autoMount = null,
+  verbosity = 'normal',
+  quiet = false,
+  log = (msg) => console.log(msg),
+}) {
+  if (!outputPath) {
+    throw new Error('An --output path (e.g. ./snapshot.zip) is required for build-snapshot');
+  }
+
+  const booted = await bootSite({
+    adapter,
+    version,
+    phpVersion,
+    site,
+    mountsBeforeInstall,
+    mounts,
+    autoMount,
+    blueprintSource,
+    verbosity,
+    quiet,
+    log,
+  });
+
+  try {
+    const absOutput = resolve(outputPath);
+
+    booted.statusLog(`Packing snapshot to ${absOutput}...`);
+    const zipBytes = await packZip(booted.php, DOCUMENT_ROOT);
+
+    mkdirSync(dirname(absOutput), { recursive: true });
+    writeFileSync(absOutput, zipBytes);
+
+    return {
+      outputPath: absOutput,
+      bytes: zipBytes.byteLength,
+      version: booted.bundle?.version ?? booted.effectiveVersion,
+      phpVersion: booted.effectivePhp,
+    };
+  } finally {
+    try {
+      booted.php.exit();
+    } catch {}
+  }
+}
+
+/**
  * Runs a CMS's native CLI (e.g. cli/joomla.php) inside PHP-WASM.
  */
 export async function runCmsCli({
@@ -252,6 +425,7 @@ export async function runCmsCli({
   site = null,
   version = null,
   phpVersion = null,
+  mountsBeforeInstall = [],
   mounts = [],
   log = () => {},
 }) {
@@ -262,28 +436,38 @@ export async function runCmsCli({
   const effectivePhp = String(phpVersion ?? adapter.defaultPhp ?? '8.4');
   const php = await bootPhp({ phpVersion: effectivePhp });
 
-  if (site) {
-    await php.mount(DOCUMENT_ROOT, createNodeFsMountHandler(resolve(site)));
-  } else {
-    const cacheDir = getCacheDir(adapter.name);
-    const bundle = await adapter.resolveBundle({ version: version ?? adapter.defaultVersion, cacheDir, log });
+  try {
+    if (site) {
+      await php.mount(DOCUMENT_ROOT, createNodeFsMountHandler(resolve(site)));
+    } else {
+      const cacheDir = getCacheDir(adapter.name);
+      const bundle = await adapter.resolveBundle({ version: version ?? adapter.defaultVersion, cacheDir, log });
 
-    if (bundle.zipBytes) {
-      await unpackZip(php, bundle.zipBytes, bundle.extractTo ?? DOCUMENT_ROOT);
+      if (bundle.zipBytes) {
+        await unpackZip(php, bundle.zipBytes, bundle.extractTo ?? DOCUMENT_ROOT);
+      }
+
+      if (mountsBeforeInstall.length > 0) {
+        await mountDirectories(php, mountsBeforeInstall);
+      }
+
+      await adapter.configure({ php, documentRoot: DOCUMENT_ROOT, url: 'http://127.0.0.1:8790', password: randomPassword(), bundle, log });
     }
 
-    await adapter.configure({ php, documentRoot: DOCUMENT_ROOT, url: 'http://127.0.0.1:8790', password: randomPassword(), bundle, log });
+    php.chdir(DOCUMENT_ROOT);
+
+    if (mounts.length > 0) {
+      await mountDirectories(php, mounts);
+    }
+
+    const response = await php.cli(['php', `${DOCUMENT_ROOT}/${adapter.cliEntrypoint}`, ...args]);
+    const stdout = await response.stdoutText;
+    const stderr = await response.stderrText;
+
+    return { exitCode: await response.exitCode, stdout, stderr };
+  } finally {
+    try {
+      php.exit();
+    } catch {}
   }
-
-  php.chdir(DOCUMENT_ROOT);
-
-  if (mounts.length > 0) {
-    await mountDirectories(php, mounts);
-  }
-
-  const response = await php.cli(['php', `${DOCUMENT_ROOT}/${adapter.cliEntrypoint}`, ...args]);
-  const stdout = await response.stdoutText;
-  const stderr = await response.stderrText;
-
-  return { exitCode: await response.exitCode, stdout, stderr };
 }
