@@ -87,6 +87,30 @@ describe('@cms-playground/cli parseCliArgs', () => {
     assert.equal(snap.options.quiet, true);
   });
 
+  it('parses setup agent with flags', () => {
+    const parsed = parseCliArgs([
+      'setup',
+      'agent',
+      '--agent',
+      'claude-code',
+      '--agent=cursor',
+      '-p',
+      '-y',
+      '--skip-mcp',
+      '--dry-run',
+      '--force',
+    ]);
+
+    assert.equal(parsed.command, 'setup');
+    assert.equal(parsed.subcommand, 'agent');
+    assert.deepEqual(parsed.options.agents, ['claude-code', 'cursor']);
+    assert.equal(parsed.options.project, true);
+    assert.equal(parsed.options.yes, true);
+    assert.equal(parsed.options.skipMcp, true);
+    assert.equal(parsed.options.dryRun, true);
+    assert.equal(parsed.options.force, true);
+  });
+
   it('rejects invalid verbosity', () => {
     assert.throws(() => parseCliArgs(['start', '--joomla', '--verbosity=loud']), /Invalid verbosity/);
   });

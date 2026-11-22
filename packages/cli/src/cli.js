@@ -6,6 +6,7 @@
 //   cms-playground run-blueprint  --joomla --blueprint=<file|url> [options]
 //   cms-playground build-snapshot --joomla --output=./site.zip [--blueprint=<file|url>] [options]
 //   cms-playground cli            --joomla [--site=<dir>] -- <joomla.php args...>
+//   cms-playground setup agent    [--agent <id>] [--project] [--yes] [--skip-mcp] [--dry-run]
 //   cms-playground list
 
 import {
@@ -20,6 +21,7 @@ import {
 } from '@cms-playground/core';
 import { joomlaAdapter } from '@cms-playground/joomla';
 import { wordpressAdapter } from '@cms-playground/wordpress';
+import { setupAgent } from './setup-agent.js';
 
 // Register built-in CMS adapters.
 registerAdapter(joomlaAdapter);
@@ -36,6 +38,7 @@ Usage:
   cms-playground run-blueprint  --joomla --blueprint=<file|url> [options]
   cms-playground build-snapshot --joomla --output=./snapshot.zip [options]
   cms-playground cli            --joomla [options] -- <cms-cli-args...>
+  cms-playground setup agent    [--agent <id>] [--project] [--yes] [--skip-mcp] [--dry-run]
   cms-playground list
 
 Commands:
@@ -43,6 +46,7 @@ Commands:
   run-blueprint   Run a Blueprint headlessly without starting an HTTP server
   build-snapshot  Boot a CMS, optionally run a Blueprint, and export a .zip snapshot
   cli             Run the CMS's native CLI (e.g. cli/joomla.php) in PHP-WASM
+  setup agent     Install the bundled Agent Skill and configure MCP for coding agents
   list            Show registered CMS adapters and supported PHP versions
 
 CMS Selection (pick one):
@@ -62,6 +66,14 @@ Options:
   --verbosity=<level>            Logging level: quiet, normal, debug (default: normal)
   --quiet                        Alias for --verbosity=quiet
   -h, --help                     Show this help message
+
+Setup Agent Options (cms-playground setup agent):
+  --agent <id>                   Target agent (auto, all, claude-code, cursor, codex, vscode, antigravity, generic)
+  -p, --project                  Install skill and MCP config into the current project
+  -y, --yes                      Skip confirmation prompts
+  --skip-mcp                     Install the bundled skill without writing MCP config
+  --dry-run                      Preview planned file and config changes without writing
+  --force                        Overwrite locally modified skill files
 `.trim();
 
 /**
@@ -74,6 +86,7 @@ export function parseCliArgs(argv) {
   const passthrough = dashDash === -1 ? [] : argv.slice(dashDash + 1);
 
   let command = null;
+  let subcommand = null;
   let cms = null;
   let cmsVersion = null;
   const options = {
@@ -86,6 +99,12 @@ export function parseCliArgs(argv) {
     mountsBeforeInstall: [],
     mounts: [],
     autoMount: null,
+    agents: [],
+    project: false,
+    yes: false,
+    skipMcp: false,
+    dryRun: false,
+    force: false,
     verbosity: 'normal',
     quiet: false,
     help: false,
@@ -96,6 +115,31 @@ export function parseCliArgs(argv) {
 
     if (arg === '-h' || arg === '--help') {
       options.help = true;
+      continue;
+    }
+
+    if (arg === '-p' || arg === '--project') {
+      options.project = true;
+      continue;
+    }
+
+    if (arg === '-y' || arg === '--yes') {
+      options.yes = true;
+      continue;
+    }
+
+    if (arg === '--skip-mcp') {
+      options.skipMcp = true;
+      continue;
+    }
+
+    if (arg === '--dry-run') {
+      options.dryRun = true;
+      continue;
+    }
+
+    if (arg === '--force') {
+      options.force = true;
       continue;
     }
 
@@ -174,6 +218,9 @@ export function parseCliArgs(argv) {
         case 'mount-before-install':
           options.mountsBeforeInstall.push(parseMountSpec(nextValue()));
           break;
+        case 'agent':
+          options.agents.push(nextValue());
+          break;
         case 'verbosity': {
           const level = nextValue().toLowerCase();
           if (!VERBOSITY_LEVELS.includes(level)) {
@@ -192,19 +239,21 @@ export function parseCliArgs(argv) {
 
     if (!command) {
       command = arg;
+    } else if (command === 'setup' && !subcommand) {
+      subcommand = arg;
     } else {
       throw new Error(`Unexpected argument: ${arg}`);
     }
   }
 
-  return { command, cms, cmsVersion, options, passthrough };
+  return { command, subcommand, cms, cmsVersion, options, passthrough };
 }
 
 /**
  * Main CLI entrypoint.
  */
 export async function run(argv = process.argv.slice(2)) {
-  const { command, cms, cmsVersion, options, passthrough } = parseCliArgs(argv);
+  const { command, subcommand, cms, cmsVersion, options, passthrough } = parseCliArgs(argv);
 
   if (options.help || !command) {
     console.log(HELP_TEXT);
@@ -217,6 +266,26 @@ export async function run(argv = process.argv.slice(2)) {
     }
 
     return 0;
+  }
+
+  if (command === 'setup') {
+    if (subcommand !== 'agent') {
+      throw new Error(
+        `Unknown setup target "${subcommand ?? ''}". Usage: cms-playground setup agent [options]`
+      );
+    }
+
+    const result = await setupAgent({
+      agents: options.agents,
+      project: options.project,
+      yes: options.yes,
+      skipMcp: options.skipMcp,
+      dryRun: options.dryRun,
+      force: options.force,
+      log: options.quiet ? () => {} : (line) => console.log(line),
+    });
+
+    return result.cancelled ? 130 : 0;
   }
 
   if (!cms) {
