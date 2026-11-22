@@ -8,6 +8,7 @@ import { PHPRequestHandler } from '@php-wasm/universal';
 import { createNodeFsMountHandler } from '@php-wasm/node';
 import { loadBlueprint, runBlueprint } from './blueprints.js';
 import { getCacheDir } from './cache.js';
+import { EXIT_CODES, PlaygroundError } from './errors.js';
 import {
   DOCUMENT_ROOT,
   bootPhp,
@@ -39,7 +40,10 @@ async function bootSite({
   log = (msg) => console.log(msg),
 }) {
   if (!adapter) {
-    throw new Error('A CMS adapter is required');
+    throw new PlaygroundError('A CMS adapter is required', {
+      code: 'missing_cms',
+      exitCode: EXIT_CODES.VALIDATION,
+    });
   }
 
   const effectiveVerbosity = quiet ? 'quiet' : verbosity;
@@ -61,15 +65,25 @@ async function bootSite({
     ?? adapter.defaultVersion;
 
   if (adapter.supportedPhp && !adapter.supportedPhp.includes(String(effectivePhp))) {
-    throw new Error(
-      `${adapter.label} does not support PHP ${effectivePhp}. Supported: ${adapter.supportedPhp.join(', ')}`
+    throw new PlaygroundError(
+      `${adapter.label} does not support PHP ${effectivePhp}. Supported: ${adapter.supportedPhp.join(', ')}`,
+      {
+        code: 'invalid_php_version',
+        exitCode: EXIT_CODES.VALIDATION,
+        recovery: `cms-playground start --${adapter.name} --php=${adapter.defaultPhp ?? adapter.supportedPhp[0]}`,
+        suggestions: [`Supported PHP versions for ${adapter.label}: ${adapter.supportedPhp.join(', ')}`],
+      }
     );
   }
 
   const absSite = site ? resolve(site) : null;
 
   if (absSite && !existsSync(absSite)) {
-    throw new Error(`Site directory does not exist: ${absSite}`);
+    throw new PlaygroundError(`Site directory does not exist: ${absSite}`, {
+      code: 'site_not_found',
+      exitCode: EXIT_CODES.NOT_FOUND,
+      suggestions: ['Verify the --site directory path or omit --site to boot a fresh CMS bundle.'],
+    });
   }
 
   const password = randomPassword();
@@ -78,14 +92,27 @@ async function bootSite({
 
   if (autoMount) {
     if (typeof adapter.detectAutoMount !== 'function') {
-      throw new Error(`${adapter.label} adapter does not support --auto-mount`);
+      throw new PlaygroundError(`${adapter.label} adapter does not support --auto-mount`, {
+        code: 'unsupported_operation',
+        exitCode: EXIT_CODES.VALIDATION,
+        suggestions: ['Use --mount=<hostPath>:<vfsPath> instead.'],
+      });
     }
 
     const targetDir = typeof autoMount === 'string' ? resolve(autoMount) : process.cwd();
     detectedAutoMount = await adapter.detectAutoMount(targetDir);
 
     if (!detectedAutoMount) {
-      throw new Error(`Could not detect a ${adapter.label} extension/plugin/theme in ${targetDir}`);
+      throw new PlaygroundError(
+        `Could not detect a ${adapter.label} extension/plugin/theme in ${targetDir}`,
+        {
+          code: 'auto_mount_not_found',
+          exitCode: EXIT_CODES.NOT_FOUND,
+          suggestions: [
+            'Pass --cwd=<project-dir> or --auto-mount=<dir> pointing to a valid extension/plugin/theme directory.',
+          ],
+        }
+      );
     }
 
     statusLog(`Auto-mount detected ${detectedAutoMount.kind} in ${targetDir}`);
@@ -167,6 +194,11 @@ async function bootSite({
       );
     }
 
+    const allMounts = [...mountsBeforeInstall, ...postInstallMounts].map(({ hostPath, vfsPath }) => ({
+      hostPath: resolve(hostPath),
+      vfsPath,
+    }));
+
     return {
       php,
       handler,
@@ -175,6 +207,7 @@ async function bootSite({
       password,
       loadedBlueprint,
       detectedAutoMount,
+      mounts: allMounts,
       effectivePhp: String(effectivePhp),
       effectiveVersion,
       statusLog,
@@ -225,13 +258,28 @@ export async function startPlayground({
     return handleRequest(request, response);
   });
 
-  await new Promise((resolveListen, rejectListen) => {
-    server.once('error', rejectListen);
-    server.listen(port, host, () => {
-      server.off('error', rejectListen);
-      resolveListen();
+  try {
+    await new Promise((resolveListen, rejectListen) => {
+      server.once('error', rejectListen);
+      server.listen(port, host, () => {
+        server.off('error', rejectListen);
+        resolveListen();
+      });
     });
-  });
+  } catch (error) {
+    if (error?.code === 'EADDRINUSE') {
+      const cmsFlag = adapter?.name ? `--${adapter.name}` : '--joomla';
+      throw new PlaygroundError(`Port ${port} on ${host} is already in use`, {
+        code: 'port_in_use',
+        exitCode: EXIT_CODES.CONFLICT,
+        retryable: false,
+        recovery: `cms-playground start ${cmsFlag} --port=0`,
+        suggestions: ['Pass --port=0 to bind an ephemeral free port, or choose another --port.'],
+        cause: error,
+      });
+    }
+    throw error;
+  }
 
   const boundPort = server.address()?.port ?? port;
   const boundUrl = `http://${host}:${boundPort}`;
@@ -348,6 +396,7 @@ export async function startPlayground({
       password: info.password ?? password,
       version: bundle?.version ?? effectiveVersion,
       phpVersion: effectivePhp,
+      mounts: booted.mounts,
       php,
       close: async () => {
         await closeHttpServer(server);
@@ -382,7 +431,13 @@ export async function runBlueprintHeadless({
   log = (msg) => console.log(msg),
 }) {
   if (!blueprintSource) {
-    throw new Error('A --blueprint file or URL is required for run-blueprint');
+    const cmsFlag = adapter?.name ? `--${adapter.name}` : '--joomla';
+    throw new PlaygroundError('A --blueprint file or URL is required for run-blueprint', {
+      code: 'missing_option',
+      exitCode: EXIT_CODES.VALIDATION,
+      recovery: `cms-playground run-blueprint ${cmsFlag} --blueprint=./blueprint.json`,
+      suggestions: ['Pass --blueprint=<file-or-url> to specify the Blueprint to run.'],
+    });
   }
 
   const booted = await bootSite({
@@ -404,6 +459,7 @@ export async function runBlueprintHeadless({
       version: booted.bundle?.version ?? booted.effectiveVersion,
       phpVersion: booted.effectivePhp,
       stepsRun: booted.loadedBlueprint?.blueprint?.steps?.length ?? 0,
+      mounts: booted.mounts,
     };
   } finally {
     try {
@@ -430,7 +486,16 @@ export async function buildSnapshot({
   log = (msg) => console.log(msg),
 }) {
   if (!outputPath) {
-    throw new Error('An --output path (e.g. ./snapshot.zip) is required for build-snapshot');
+    const cmsFlag = adapter?.name ? `--${adapter.name}` : '--joomla';
+    throw new PlaygroundError(
+      'An --output path (e.g. ./snapshot.zip) is required for build-snapshot',
+      {
+        code: 'missing_option',
+        exitCode: EXIT_CODES.VALIDATION,
+        recovery: `cms-playground build-snapshot ${cmsFlag} --output=./snapshot.zip`,
+        suggestions: ['Pass --output=<path.zip> to specify where to write the snapshot archive.'],
+      }
+    );
   }
 
   const booted = await bootSite({
@@ -461,6 +526,7 @@ export async function buildSnapshot({
       bytes: zipBytes.byteLength,
       version: booted.bundle?.version ?? booted.effectiveVersion,
       phpVersion: booted.effectivePhp,
+      mounts: booted.mounts,
     };
   } finally {
     try {
@@ -487,7 +553,14 @@ export async function runCmsCli({
   log = () => {},
 }) {
   if (!adapter?.cliEntrypoint) {
-    throw new Error(`${adapter?.label ?? 'This CMS'} adapter does not define a CLI entrypoint`);
+    throw new PlaygroundError(
+      `${adapter?.label ?? 'This CMS'} adapter does not define a CLI entrypoint`,
+      {
+        code: 'unsupported_operation',
+        exitCode: EXIT_CODES.VALIDATION,
+        suggestions: ['Use `run-blueprint` with a `runPHP` step instead.'],
+      }
+    );
   }
 
   let tempSiteDir = null;
@@ -542,7 +615,13 @@ export async function runCmsCli({
       const stdout = await response.stdoutText;
       const stderr = await response.stderrText;
 
-      return { exitCode: await response.exitCode, stdout, stderr };
+      return {
+        exitCode: await response.exitCode,
+        stdout,
+        stderr,
+        version: booted.bundle?.version ?? booted.effectiveVersion,
+        phpVersion: effectivePhp,
+      };
     } finally {
       try {
         php.exit();

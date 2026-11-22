@@ -13,6 +13,7 @@ import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
+import { EXIT_CODES, PlaygroundError } from '@cms-playground/core';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 export const BUNDLED_SKILL_DIR = resolve(__dirname, '../skills/cms-playground');
@@ -131,8 +132,13 @@ export function resolveAgentTargets(requestedAgents, homeDir) {
 
   for (const selector of selectors) {
     if (!ACCEPTED_AGENT_SELECTORS.includes(selector)) {
-      throw new Error(
-        `Unknown agent "${selector}". Expected one of: ${ACCEPTED_AGENT_SELECTORS.join(', ')}`
+      throw new PlaygroundError(
+        `Unknown agent "${selector}". Expected one of: ${ACCEPTED_AGENT_SELECTORS.join(', ')}`,
+        {
+          code: 'invalid_agent',
+          exitCode: EXIT_CODES.VALIDATION,
+          suggestions: [`Accepted agents: ${ACCEPTED_AGENT_SELECTORS.join(', ')}`],
+        }
       );
     }
   }
@@ -405,8 +411,14 @@ export async function setupAgent(options = {}) {
           actions.push({ kind: 'skill', agent: plan.agent, path: destPath, action: 'conflict' });
           continue;
         }
-        throw new Error(
-          `Skill file has local modifications: ${destPath}. Re-run with --force to overwrite.`
+        throw new PlaygroundError(
+          `Skill file has local modifications: ${destPath}. Re-run with --force to overwrite.`,
+          {
+            code: 'file_exists',
+            exitCode: EXIT_CODES.CONFLICT,
+            recovery: 'cms-playground setup agent --force',
+            suggestions: ['Pass --force to overwrite locally modified skill files.'],
+          }
         );
       }
 

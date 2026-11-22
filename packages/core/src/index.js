@@ -2,6 +2,13 @@ export { getAdapter, listAdapters, registerAdapter, unregisterAdapter } from './
 export { CORE_STEPS, loadBlueprint, resolveVfsPath, runBlueprint } from './blueprints.js';
 export { downloadToCache, fetchCachedBytes, getCacheDir } from './cache.js';
 export {
+  EXIT_CODES,
+  PlaygroundError,
+  classifyError,
+  formatJsonPointer,
+  toErrorPayload,
+} from './errors.js';
+export {
   DOCUMENT_ROOT,
   bootPhp,
   createRequestQueue,

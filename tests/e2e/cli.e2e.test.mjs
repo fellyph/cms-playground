@@ -5,6 +5,8 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import http from 'node:http';
+import net from 'node:net';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
 import {
@@ -486,6 +488,262 @@ describe('CLI E2E: setup agent', () => {
         command: 'npx',
         args: ['-y', '@cms-playground/cli', 'mcp'],
       });
+    } finally {
+      tmp.cleanup();
+    }
+  });
+});
+
+describe('CLI E2E: --json receipts, agent mode, --cwd, and classified exit codes', () => {
+  it('emits { data } JSON receipts for list, run-blueprint, build-snapshot, and cli with --cwd', async () => {
+    const listRes = await runCliProcess(['list', '--json']);
+    assert.equal(listRes.exitCode, 0, listRes.stderr);
+    const listPayload = JSON.parse(listRes.stdout.trim());
+    assert.ok(Array.isArray(listPayload.data.adapters));
+    assert.ok(listPayload.data.adapters.some((a) => a.name === 'joomla'));
+
+    // Agent mode via CMS_PLAYGROUND_AGENT=1 and CI=1 enables --json automatically
+    for (const agentEnv of [{ CMS_PLAYGROUND_AGENT: '1' }, { CI: '1' }]) {
+      const agentRes = await runCliProcess(['list'], { env: agentEnv });
+      assert.equal(agentRes.exitCode, 0, agentRes.stderr);
+      const agentPayload = JSON.parse(agentRes.stdout.trim());
+      assert.ok(Array.isArray(agentPayload.data.adapters));
+    }
+
+    const tmp = createTempDir('e2e-json-cwd-');
+    try {
+      const siteDir = join(tmp.dir, 'site');
+      const mountDir = join(tmp.dir, 'extra');
+      mkdirSync(siteDir, { recursive: true });
+      mkdirSync(mountDir, { recursive: true });
+      createMockJoomlaSite(siteDir);
+      writeFileSync(join(mountDir, 'marker.txt'), 'mounted');
+      writeFileSync(
+        join(tmp.dir, 'bp.json'),
+        JSON.stringify({
+          steps: [{ step: 'writeFile', path: 'json-check.txt', data: 'ok' }],
+        })
+      );
+
+      // run-blueprint with --cwd and --json
+      const bpRes = await runCliProcess([
+        'run-blueprint',
+        '--joomla',
+        '--site=./site',
+        '--blueprint=./bp.json',
+        '--mount=./extra:/var/www/html/extra',
+        `--cwd=${tmp.dir}`,
+        '--json',
+      ]);
+      assert.equal(bpRes.exitCode, 0, bpRes.stderr);
+      const bpPayload = JSON.parse(bpRes.stdout.trim());
+      assert.equal(bpPayload.data.cms, 'joomla');
+      assert.equal(bpPayload.data.stepsRun, 1);
+      assert.equal(bpPayload.data.mounts.length, 1);
+      assert.equal(bpPayload.data.mounts[0].vfsPath, '/var/www/html/extra');
+
+      // build-snapshot with --cwd and --json
+      const snapRes = await runCliProcess([
+        'build-snapshot',
+        '--joomla',
+        '--site=./site',
+        '--output=./out/snap.zip',
+        `--cwd=${tmp.dir}`,
+        '--json',
+      ]);
+      assert.equal(snapRes.exitCode, 0, snapRes.stderr);
+      const snapPayload = JSON.parse(snapRes.stdout.trim());
+      assert.equal(snapPayload.data.cms, 'joomla');
+      assert.equal(snapPayload.data.outputPath, join(tmp.dir, 'out', 'snap.zip'));
+      assert.ok(snapPayload.data.bytes > 0);
+      assert.equal(existsSync(join(tmp.dir, 'out', 'snap.zip')), true);
+
+      // cli with --cwd and --json
+      const cliRes = await runCliProcess([
+        'cli',
+        '--joomla',
+        '--site=./site',
+        `--cwd=${tmp.dir}`,
+        '--json',
+        '--',
+        'user:list',
+      ]);
+      assert.equal(cliRes.exitCode, 0, cliRes.stderr);
+      const cliPayload = JSON.parse(cliRes.stdout.trim());
+      assert.equal(cliPayload.data.cms, 'joomla');
+      assert.equal(cliPayload.data.exitCode, 0);
+      assert.equal(JSON.parse(cliPayload.data.stdout.trim()).entrypoint, 'cli/joomla.php');
+    } finally {
+      tmp.cleanup();
+    }
+  });
+
+  it('emits a single JSON ready-receipt on stdout for start --json and serves HTTP', async () => {
+    const tmp = createTempDir('e2e-start-json-');
+    try {
+      createMockWordPressSite(tmp.dir);
+      const child = spawn(
+        process.execPath,
+        [CLI_BIN, 'start', '--wp', `--site=${tmp.dir}`, '--port=0', '--json'],
+        { stdio: ['ignore', 'pipe', 'pipe'] }
+      );
+
+      let stdout = '';
+      let stderr = '';
+      const exitPromise = new Promise((resolveExit) => {
+        child.once('exit', (code, signal) => resolveExit({ code, signal }));
+      });
+
+      const receipt = await new Promise((resolveReady, rejectReady) => {
+        const timer = setTimeout(() => {
+          child.kill('SIGKILL');
+          rejectReady(new Error(`Timed out waiting for JSON ready-receipt.\nSTDOUT:\n${stdout}\nSTDERR:\n${stderr}`));
+        }, 30_000);
+
+        child.stdout.on('data', (chunk) => {
+          stdout += chunk.toString('utf8');
+          const trimmed = stdout.trim();
+          if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+            try {
+              const parsed = JSON.parse(trimmed);
+              clearTimeout(timer);
+              resolveReady(parsed);
+            } catch {}
+          }
+        });
+        child.stderr.on('data', (chunk) => {
+          stderr += chunk.toString('utf8');
+        });
+        child.once('exit', (code) => {
+          clearTimeout(timer);
+          rejectReady(new Error(`Exited early (${code}). STDOUT:\n${stdout}\nSTDERR:\n${stderr}`));
+        });
+      });
+
+      try {
+        assert.equal(receipt.data.cms, 'wp');
+        assert.match(receipt.data.url, /^http:\/\/127\.0\.0\.1:\d+$/);
+        assert.equal(receipt.data.adminUrl, `${receipt.data.url}/wp-admin/`);
+        assert.equal(receipt.data.username, 'admin');
+        assert.ok(typeof receipt.data.password === 'string' && receipt.data.password.length > 0);
+        assert.equal(receipt.data.pid, child.pid);
+        assert.ok(Array.isArray(receipt.data.mounts));
+
+        const res = await fetch(`${receipt.data.url}/`);
+        assert.equal(res.status, 200);
+        // Ensure HTTP request did not pollute stdout in --json mode
+        assert.equal(stdout.trim().split('\n').length, 1);
+      } finally {
+        child.kill('SIGTERM');
+        const exit = await exitPromise;
+        assert.equal(exit.code, 0);
+      }
+    } finally {
+      tmp.cleanup();
+    }
+  });
+
+  it('emits structured JSON errors on stderr with classified exit codes (2, 20, 30, 40)', async () => {
+    // Exit 2: validation error on unknown flag
+    const badFlag = await runCliProcess(['start', '--joomla', '--nope', '--json']);
+    assert.equal(badFlag.exitCode, 2);
+    assert.equal(badFlag.stdout.trim(), '');
+    const badFlagErr = JSON.parse(badFlag.stderr.trim());
+    assert.equal(badFlagErr.error.code, 'invalid_option');
+    assert.equal(badFlagErr.error.retryable, false);
+    assert.ok(Array.isArray(badFlagErr.error.suggestions));
+
+    // Exit 2: Blueprint validation failure with RFC 6901 pointer
+    const tmp = createTempDir('e2e-json-errors-');
+    try {
+      createMockWordPressSite(tmp.dir);
+      const badBp = join(tmp.dir, 'bad-bp.json');
+      writeFileSync(
+        badBp,
+        JSON.stringify({
+          steps: [
+            { step: 'mkdir', path: 'ok' },
+            { step: 'nonExistentStep', plugin: 'demo' },
+          ],
+        })
+      );
+
+      const bpErrRes = await runCliProcess([
+        'run-blueprint',
+        '--wp',
+        `--site=${tmp.dir}`,
+        `--blueprint=${badBp}`,
+        '--json',
+      ]);
+      assert.equal(bpErrRes.exitCode, 2);
+      assert.equal(bpErrRes.stdout.trim(), '');
+      const bpErr = JSON.parse(bpErrRes.stderr.trim());
+      assert.equal(bpErr.error.code, 'invalid_blueprint_step');
+      assert.equal(bpErr.error.pointer, '/steps/1/step');
+
+      // Exit 20: missing --site
+      const missingSite = await runCliProcess(
+        ['run-blueprint', '--wp', '--site=/nonexistent-dir-99999', `--blueprint=${badBp}`],
+        { env: { CMS_PLAYGROUND_AGENT: '1' } }
+      );
+      assert.equal(missingSite.exitCode, 20);
+      const missingSiteErr = JSON.parse(missingSite.stderr.trim());
+      assert.equal(missingSiteErr.error.code, 'site_not_found');
+
+      // Exit 20: missing --blueprint
+      const missingBp = await runCliProcess([
+        'run-blueprint',
+        '--wp',
+        `--site=${tmp.dir}`,
+        '--blueprint=/nonexistent-bp-99999.json',
+        '--json',
+      ]);
+      assert.equal(missingBp.exitCode, 20);
+      assert.equal(JSON.parse(missingBp.stderr.trim()).error.code, 'blueprint_not_found');
+
+      // Exit 30: port_in_use with runnable recovery command
+      const blocker = net.createServer();
+      await new Promise((r) => blocker.listen(0, '127.0.0.1', r));
+      const busyPort = blocker.address().port;
+      try {
+        const conflictRes = await runCliProcess([
+          'start',
+          '--wp',
+          `--site=${tmp.dir}`,
+          `--port=${busyPort}`,
+          '--json',
+        ]);
+        assert.equal(conflictRes.exitCode, 30);
+        const conflictErr = JSON.parse(conflictRes.stderr.trim());
+        assert.equal(conflictErr.error.code, 'port_in_use');
+        assert.equal(conflictErr.error.retryable, false);
+        assert.equal(conflictErr.error.recovery, 'cms-playground start --wp --port=0');
+      } finally {
+        await new Promise((r) => blocker.close(r));
+      }
+
+      // Exit 40: retryable network error (HTTP 500 blueprint fetch)
+      const failServer = http.createServer((_req, res) => {
+        res.statusCode = 500;
+        res.end('server error');
+      });
+      await new Promise((r) => failServer.listen(0, '127.0.0.1', r));
+      const failPort = failServer.address().port;
+      try {
+        const netRes = await runCliProcess([
+          'run-blueprint',
+          '--wp',
+          `--site=${tmp.dir}`,
+          `--blueprint=http://127.0.0.1:${failPort}/bp.json`,
+          '--json',
+        ]);
+        assert.equal(netRes.exitCode, 40);
+        const netErr = JSON.parse(netRes.stderr.trim());
+        assert.equal(netErr.error.code, 'blueprint_fetch_failed');
+        assert.equal(netErr.error.retryable, true);
+      } finally {
+        await new Promise((r) => failServer.close(r));
+      }
     } finally {
       tmp.cleanup();
     }
