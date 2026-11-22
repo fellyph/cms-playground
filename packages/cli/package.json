@@ -4,6 +4,25 @@
   "description": "Run Joomla, WordPress, and other PHP CMSs locally in WebAssembly with zero setup",
   "license": "GPL-2.0-or-later",
   "type": "module",
+  "files": [
+    "bin",
+    "src"
+  ],
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/fellyph/cms-playground.git",
+    "directory": "packages/cli"
+  },
+  "bugs": {
+    "url": "https://github.com/fellyph/cms-playground/issues"
+  },
+  "homepage": "https://github.com/fellyph/cms-playground#readme",
   "bin": {
     "cms-playground": "./bin/cms-playground.mjs"
   },

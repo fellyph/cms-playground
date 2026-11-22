@@ -4,6 +4,24 @@
   "description": "WordPress adapter for @cms-playground",
   "license": "GPL-2.0-or-later",
   "type": "module",
+  "files": [
+    "src"
+  ],
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/fellyph/cms-playground.git",
+    "directory": "packages/wordpress"
+  },
+  "bugs": {
+    "url": "https://github.com/fellyph/cms-playground/issues"
+  },
+  "homepage": "https://github.com/fellyph/cms-playground#readme",
   "exports": {
     ".": "./src/index.js"
   },

@@ -74,8 +74,8 @@ A phased roadmap for `@cms-playground`, modeled on [`@wp-playground/cli`](https:
 
 *Goal: rock-solid reliability and one-command `npx` installation.*
 
-- [ ] **GitHub Actions CI**
-  - Run unit tests and end-to-end integration tests that boot real Joomla and WordPress instances over HTTP on Linux, macOS, and Windows.
+- [x] **GitHub Actions CI**
+  - Run unit tests and end-to-end integration tests that boot real Joomla and WordPress instances over HTTP on Linux and macOS.
 - [ ] **npm Publishing**
   - Publish `@cms-playground/core`, `@cms-playground/joomla`, `@cms-playground/wordpress`, and `@cms-playground/cli` to npm so `npx @cms-playground/cli start --joomla` works anywhere.
 - [ ] **Reusable GitHub Action**
