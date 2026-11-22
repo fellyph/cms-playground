@@ -46,6 +46,7 @@ Options:
   --site=<dir>       Mount an existing local site directory instead of a fresh bundle
   --blueprint=<src>  Blueprint JSON file path or URL to execute after boot
   --mount=<src:vfs>  Mount a host folder into the virtual filesystem (repeatable)
+  --auto-mount[=dir] Auto-detect and mount a Joomla extension or WP plugin/theme (default: CWD)
   --quiet            Suppress request and progress logs
   -h, --help         Show this help message
 `.trim();
@@ -69,6 +70,7 @@ export function parseCliArgs(argv) {
     site: null,
     blueprint: null,
     mounts: [],
+    autoMount: null,
     quiet: false,
     help: false,
   };
@@ -90,6 +92,11 @@ export function parseCliArgs(argv) {
       const eq = arg.indexOf('=');
       const key = eq === -1 ? arg.slice(2) : arg.slice(2, eq);
       const inlineValue = eq === -1 ? null : arg.slice(eq + 1);
+
+      if (key === 'auto-mount') {
+        options.autoMount = inlineValue || true;
+        continue;
+      }
 
       // Check if flag matches a registered CMS adapter (--joomla, --wp, --wordpress, ...).
       const adapter = getAdapter(key);
@@ -192,6 +199,7 @@ export async function run(argv = process.argv.slice(2)) {
       host: options.host,
       site: options.site,
       mounts: options.mounts,
+      autoMount: options.autoMount,
       blueprintSource: options.blueprint,
       quiet: options.quiet,
     });

@@ -28,6 +28,7 @@ export async function startPlayground({
   host = '127.0.0.1',
   site = null,
   mounts = [],
+  autoMount = null,
   blueprintSource = null,
   quiet = false,
   log = (msg) => console.log(msg),
@@ -60,6 +61,23 @@ export async function startPlayground({
   const password = randomPassword();
   const statusLog = quiet ? () => {} : log;
 
+  let detectedAutoMount = null;
+
+  if (autoMount) {
+    if (typeof adapter.detectAutoMount !== 'function') {
+      throw new Error(`${adapter.label} adapter does not support --auto-mount`);
+    }
+
+    const targetDir = typeof autoMount === 'string' ? resolve(autoMount) : process.cwd();
+    detectedAutoMount = await adapter.detectAutoMount(targetDir);
+
+    if (!detectedAutoMount) {
+      throw new Error(`Could not detect a ${adapter.label} extension/plugin/theme in ${targetDir}`);
+    }
+
+    statusLog(`Auto-mount detected ${detectedAutoMount.kind} in ${targetDir}`);
+  }
+
   statusLog(`Booting PHP ${effectivePhp} (WebAssembly)...`);
   const php = await bootPhp({ phpVersion: String(effectivePhp) });
 
@@ -86,8 +104,10 @@ export async function startPlayground({
 
   php.chdir(DOCUMENT_ROOT);
 
-  if (mounts.length > 0) {
-    await mountDirectories(php, mounts);
+  const allMounts = [...(detectedAutoMount?.mounts ?? []), ...mounts];
+
+  if (allMounts.length > 0) {
+    await mountDirectories(php, allMounts);
   }
 
   statusLog(`Configuring ${adapter.label}...`);
@@ -100,6 +120,10 @@ export async function startPlayground({
     bundle,
     log: statusLog,
   })) ?? {};
+
+  if (typeof detectedAutoMount?.postMount === 'function') {
+    await detectedAutoMount.postMount({ php, documentRoot: DOCUMENT_ROOT, url, log: statusLog });
+  }
 
   const handler = new PHPRequestHandler({
     php,
