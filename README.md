@@ -33,6 +33,9 @@ npx cms-playground run-blueprint --wp --blueprint=./blueprint.json --quiet
 # Run Joomla's own CLI (cli/joomla.php) without local PHP
 npx cms-playground cli --joomla -- user:list
 
+# Install the bundled Agent Skill and configure MCP for coding agents
+npx cms-playground setup agent --dry-run
+
 # List available CMS adapters
 npx cms-playground list
 ```

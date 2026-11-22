@@ -150,6 +150,17 @@ npx cms-playground cli --joomla --site=./my-joomla-site -- cache:clean
 | `--quiet` | `false` | Alias for `--verbosity=quiet` |
 | `-h`, `--help` | — | Show CLI help text |
 
+### `setup agent` Flags
+
+| Flag | Default | Description |
+|---|---|---|
+| `--agent <id>` | `auto` | Target agent (`auto`, `all`, `claude-code`, `cursor`, `codex`, `vscode`, `antigravity`, `generic`) |
+| `-p`, `--project` | `false` | Install skill and MCP config into the current project |
+| `-y`, `--yes` | `false` | Skip confirmation prompts |
+| `--skip-mcp` | `false` | Install the bundled skill without writing MCP config |
+| `--dry-run` | `false` | Preview planned file and config changes without writing |
+| `--force` | `false` | Overwrite locally modified skill files |
+
 ### Machine-Readable Output & Exit Codes
 
 Pass `--json` (or set `CMS_PLAYGROUND_AGENT=1` / `CI=1`) to enable agent mode: `stdout` receives a single `{ "data": ... }` JSON receipt, `stderr` receives structured `{ "error": { code, message, retryable, recovery, suggestions, pointer? } }` objects on failure, interactive prompts are disabled, and ANSI colors are suppressed.

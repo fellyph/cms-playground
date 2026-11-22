@@ -33,6 +33,8 @@ A phased roadmap for `@cms-playground`, modeled on [`@wp-playground/cli`](https:
   - Boot a CMS, execute a Blueprint, and export a portable `.zip` snapshot (replacing bespoke build scripts).
 - [x] **`--verbosity=quiet|normal|debug`**
   - Control logging granularity (`quiet`, `normal`, `debug`).
+- [x] **Coding agent setup (`setup agent`)**
+  - Install the bundled `cms-playground` Agent Skill and configure MCP client entries (`claude-code`, `cursor`, `codex`, `vscode`, `antigravity`, `generic`).
 - [ ] **`--open` browser launch**
   - Optionally open the site/admin URL in the default browser on startup.
 
