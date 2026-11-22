@@ -304,7 +304,43 @@ export function detectJoomlaAutoMount(dir) {
       mounts: [{ hostPath: absDir, vfsPath }],
       async postMount({ php, documentRoot, log }) {
         log?.(`Discovering and installing Joomla ${type} "${element}"...`);
-        await php.cli(['php', `${documentRoot}/cli/joomla.php`, 'extension:discover:install']);
+        await runPhpCode(
+          php,
+          `
+          define('_JEXEC', 1);
+          define('JPATH_BASE', ${JSON.stringify(documentRoot)} . '/administrator');
+          if (is_file(JPATH_BASE . '/defines.php')) {
+              include_once JPATH_BASE . '/defines.php';
+          }
+          if (!defined('_JDEFINES')) {
+              require_once JPATH_BASE . '/includes/defines.php';
+          }
+          require_once JPATH_BASE . '/includes/framework.php';
+
+          $container = \\Joomla\\CMS\\Factory::getContainer();
+          $container->alias('session.web', 'session.web.administrator')
+              ->alias('session', 'session.web.administrator')
+              ->alias('JSession', 'session.web.administrator');
+          $app = $container->get(\\Joomla\\CMS\\Application\\AdministratorApplication::class);
+          \\Joomla\\CMS\\Factory::$application = $app;
+
+          $installer = \\Joomla\\CMS\\Installer\\Installer::getInstance();
+          $discovered = $installer->discover();
+          $db = $container->get(\\Joomla\\Database\\DatabaseInterface::class);
+          foreach ($discovered as $ext) {
+              $ext->store();
+          }
+          $query = $db->getQuery(true)
+              ->select($db->quoteName('extension_id'))
+              ->from($db->quoteName('#__extensions'))
+              ->where($db->quoteName('state') . ' = -1')
+              ->where($db->quoteName('element') . ' = ' . $db->quote(${JSON.stringify(element)}));
+          $extIds = $db->setQuery($query)->loadColumn();
+          foreach ($extIds as $id) {
+              $installer->discover_install((int) $id);
+          }
+          `
+        );
       },
     };
   }

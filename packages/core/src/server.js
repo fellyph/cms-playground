@@ -1,8 +1,9 @@
 // Core HTTP server, headless Blueprint runner, snapshot builder, and CMS CLI runner backed by @php-wasm/node.
 
 import http from 'node:http';
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
 import { PHPRequestHandler } from '@php-wasm/universal';
 import { createNodeFsMountHandler } from '@php-wasm/node';
 import { loadBlueprint, runBlueprint } from './blueprints.js';
@@ -434,40 +435,71 @@ export async function runCmsCli({
   }
 
   const effectivePhp = String(phpVersion ?? adapter.defaultPhp ?? '8.4');
-  const php = await bootPhp({ phpVersion: effectivePhp });
+  let tempSiteDir = null;
+  let hostSiteDir = site ? resolve(site) : null;
 
   try {
-    if (site) {
-      await php.mount(DOCUMENT_ROOT, createNodeFsMountHandler(resolve(site)));
-    } else {
-      const cacheDir = getCacheDir(adapter.name);
-      const bundle = await adapter.resolveBundle({ version: version ?? adapter.defaultVersion, cacheDir, log });
+    if (!hostSiteDir) {
+      // @php-wasm cannot call php.cli() after php.run() on the same WASM instance.
+      // Stage bundle unpack + configure into a temp directory with a setup instance,
+      // then run php.cli() on a fresh PHP instance mounted to that directory.
+      tempSiteDir = mkdtempSync(join(tmpdir(), 'cms-playground-cli-'));
+      hostSiteDir = tempSiteDir;
 
-      if (bundle.zipBytes) {
-        await unpackZip(php, bundle.zipBytes, bundle.extractTo ?? DOCUMENT_ROOT);
+      const setupPhp = await bootPhp({ phpVersion: effectivePhp });
+
+      try {
+        await setupPhp.mount(DOCUMENT_ROOT, createNodeFsMountHandler(hostSiteDir));
+
+        const cacheDir = getCacheDir(adapter.name);
+        const bundle = await adapter.resolveBundle({ version: version ?? adapter.defaultVersion, cacheDir, log });
+
+        if (bundle.zipBytes) {
+          await unpackZip(setupPhp, bundle.zipBytes, bundle.extractTo ?? DOCUMENT_ROOT);
+        }
+
+        if (mountsBeforeInstall.length > 0) {
+          await mountDirectories(setupPhp, mountsBeforeInstall);
+        }
+
+        await adapter.configure({
+          php: setupPhp,
+          documentRoot: DOCUMENT_ROOT,
+          url: 'http://127.0.0.1:8790',
+          password: randomPassword(),
+          bundle,
+          log,
+        });
+      } finally {
+        try {
+          setupPhp.exit();
+        } catch {}
       }
-
-      if (mountsBeforeInstall.length > 0) {
-        await mountDirectories(php, mountsBeforeInstall);
-      }
-
-      await adapter.configure({ php, documentRoot: DOCUMENT_ROOT, url: 'http://127.0.0.1:8790', password: randomPassword(), bundle, log });
     }
 
-    php.chdir(DOCUMENT_ROOT);
+    const php = await bootPhp({ phpVersion: effectivePhp });
 
-    if (mounts.length > 0) {
-      await mountDirectories(php, mounts);
-    }
-
-    const response = await php.cli(['php', `${DOCUMENT_ROOT}/${adapter.cliEntrypoint}`, ...args]);
-    const stdout = await response.stdoutText;
-    const stderr = await response.stderrText;
-
-    return { exitCode: await response.exitCode, stdout, stderr };
-  } finally {
     try {
-      php.exit();
-    } catch {}
+      await php.mount(DOCUMENT_ROOT, createNodeFsMountHandler(hostSiteDir));
+      php.chdir(DOCUMENT_ROOT);
+
+      if (mounts.length > 0) {
+        await mountDirectories(php, mounts);
+      }
+
+      const response = await php.cli(['php', `${DOCUMENT_ROOT}/${adapter.cliEntrypoint}`, ...args]);
+      const stdout = await response.stdoutText;
+      const stderr = await response.stderrText;
+
+      return { exitCode: await response.exitCode, stdout, stderr };
+    } finally {
+      try {
+        php.exit();
+      } catch {}
+    }
+  } finally {
+    if (tempSiteDir) {
+      rmSync(tempSiteDir, { recursive: true, force: true });
+    }
   }
 }

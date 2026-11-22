@@ -26,4 +26,30 @@ jobs:
 
       - run: npm ci
       - run: npm test
+      - run: npm run test:e2e:cli
       - run: node packages/cli/bin/cms-playground.mjs list
+
+  e2e:
+    name: E2E (${{ matrix.cms }})
+    needs: test
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        cms: [joomla, wp]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/cms-playground/${{ matrix.cms }}
+          key: cms-playground-${{ matrix.cms }}-v1
+
+      - run: npm ci
+      - run: npm run test:e2e:${{ matrix.cms }}

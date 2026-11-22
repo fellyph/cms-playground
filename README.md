@@ -50,7 +50,18 @@ npx cms-playground list
 ## Testing
 
 ```bash
+# Unit tests, PHP-WASM core tests, and automated docs tests
 npm test
+
+# Fast offline CLI end-to-end tests (spawns real cms-playground processes)
+npm run test:e2e:cli
+
+# Live end-to-end tests against real Joomla and WordPress bundles
+npm run test:e2e:joomla
+npm run test:e2e:wp
+
+# All end-to-end tests
+npm run test:e2e
 ```
 
-The test suite verifies all package unit tests, live PHP 8.4 WebAssembly HTTP/Blueprint/snapshot tests, and automated documentation tests (`tests/docs.test.mjs`) that validate every CLI command, Blueprint JSON example, and Markdown link in the docs.
+The test suite verifies all package unit tests, live PHP 8.4 WebAssembly HTTP/Blueprint/snapshot tests, automated documentation tests (`tests/docs.test.mjs`), and end-to-end CLI tests (`tests/e2e/*.e2e.test.mjs`) modeled on `@wp-playground/cli`.
