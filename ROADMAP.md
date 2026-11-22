@@ -20,19 +20,21 @@ A phased roadmap for `@cms-playground`, modeled on [`@wp-playground/cli`](https:
 
 *Goal: match the everyday local development workflow of `@wp-playground/cli server`.*
 
-- [ ] **`--auto-mount` (zero-config extension/plugin development)**
+- [x] **`--auto-mount` (zero-config extension/plugin development)**
   - **Joomla:** detect XML manifests (`<extension type="component|module|plugin|template">`) in CWD, mount into the right `/var/www/html/...` path, and run Joomla Discover & Install automatically.
   - **WordPress:** detect plugin headers, theme `style.css`, or `wp-content/` in CWD, mount into `wp-content/plugins|themes`, and activate automatically.
-- [ ] **Mount lifecycle ordering (`--mount-before-install` vs `--mount`)**
+- [x] **Mount lifecycle ordering (`--mount-before-install` vs `--mount`)**
   - Allow mounting custom config files, DB drop-ins, or core overrides *before* `adapter.configure()` runs.
 - [ ] **`--login` auto-login convenience**
   - Provide a local `/__login` redirect or auto-authenticated session so developers don't have to paste credentials on every ephemeral start.
-- [ ] **`run-blueprint` command**
+- [x] **`run-blueprint` command**
   - Execute a Blueprint headlessly without starting an HTTP server (ideal for CI, smoke tests, and scripted site setup).
-- [ ] **`build-snapshot` command**
+- [x] **`build-snapshot` command**
   - Boot a CMS, execute a Blueprint, and export a portable `.zip` snapshot (replacing bespoke build scripts).
-- [ ] **`--verbosity=quiet|normal|debug` & `--open`**
-  - Control logging granularity and optionally open the site/admin URL in the default browser on startup.
+- [x] **`--verbosity=quiet|normal|debug`**
+  - Control logging granularity (`quiet`, `normal`, `debug`).
+- [ ] **`--open` browser launch**
+  - Optionally open the site/admin URL in the default browser on startup.
 
 ---
 

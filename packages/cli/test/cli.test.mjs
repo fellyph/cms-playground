@@ -54,6 +54,14 @@ describe('@cms-playground/cli parseCliArgs', () => {
     assert.equal(parsed.options.mounts[1].vfsPath, '/var/www/html/plugins/system/b');
   });
 
+  it('parses --auto-mount with and without an explicit directory', () => {
+    const cwdMount = parseCliArgs(['start', '--joomla', '--auto-mount']);
+    const dirMount = parseCliArgs(['start', '--wp', '--auto-mount=./my-plugin']);
+
+    assert.equal(cwdMount.options.autoMount, true);
+    assert.equal(dirMount.options.autoMount, './my-plugin');
+  });
+
   it('parses run-blueprint and build-snapshot with --mount-before-install and --verbosity', () => {
     const bp = parseCliArgs([
       'run-blueprint',

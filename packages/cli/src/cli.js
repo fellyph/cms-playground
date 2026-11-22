@@ -58,6 +58,7 @@ Options:
   --output=<path>                Output .zip path for build-snapshot
   --mount=<src:vfs>              Mount a host folder into VFS after configure (repeatable)
   --mount-before-install=<s:v>   Mount a host folder into VFS before configure (repeatable)
+  --auto-mount[=dir]             Auto-detect and mount a Joomla extension or WP plugin/theme (default: CWD)
   --verbosity=<level>            Logging level: quiet, normal, debug (default: normal)
   --quiet                        Alias for --verbosity=quiet
   -h, --help                     Show this help message
@@ -84,6 +85,7 @@ export function parseCliArgs(argv) {
     output: null,
     mountsBeforeInstall: [],
     mounts: [],
+    autoMount: null,
     verbosity: 'normal',
     quiet: false,
     help: false,
@@ -107,6 +109,11 @@ export function parseCliArgs(argv) {
       const eq = arg.indexOf('=');
       const key = eq === -1 ? arg.slice(2) : arg.slice(2, eq);
       const inlineValue = eq === -1 ? null : arg.slice(eq + 1);
+
+      if (key === 'auto-mount') {
+        options.autoMount = inlineValue || true;
+        continue;
+      }
 
       // Check if flag matches a registered CMS adapter (--joomla, --wp, --wordpress, ...).
       const adapter = getAdapter(key);
@@ -225,6 +232,7 @@ export async function run(argv = process.argv.slice(2)) {
       site: options.site,
       mountsBeforeInstall: options.mountsBeforeInstall,
       mounts: options.mounts,
+      autoMount: options.autoMount,
       blueprintSource: options.blueprint,
       verbosity: options.verbosity,
       quiet: options.quiet,
@@ -257,6 +265,7 @@ export async function run(argv = process.argv.slice(2)) {
       site: options.site,
       mountsBeforeInstall: options.mountsBeforeInstall,
       mounts: options.mounts,
+      autoMount: options.autoMount,
       verbosity: options.verbosity,
       quiet: options.quiet,
     });
@@ -278,6 +287,7 @@ export async function run(argv = process.argv.slice(2)) {
       site: options.site,
       mountsBeforeInstall: options.mountsBeforeInstall,
       mounts: options.mounts,
+      autoMount: options.autoMount,
       verbosity: options.verbosity,
       quiet: options.quiet,
     });
