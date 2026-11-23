@@ -29,9 +29,10 @@ import { kirbyAdapter } from '@cms-playground/kirby';
 import { typo3Adapter } from '@cms-playground/typo3';
 import { wordpressAdapter } from '@cms-playground/wordpress';
 import { buildCliMap, buildCliPaths } from './map.js';
+import { MCP_TOOLS, createMcpServer, runMcpServer } from './mcp.js';
 import { setupAgent } from './setup-agent.js';
 
-export { buildCliMap, buildCliPaths };
+export { MCP_TOOLS, buildCliMap, buildCliPaths, createMcpServer, runMcpServer };
 
 // Register built-in CMS adapters.
 registerAdapter(joomlaAdapter);
@@ -55,6 +56,7 @@ Usage:
   cms-playground build-snapshot --joomla --output=./snapshot.zip [options]
   cms-playground cli            --joomla [options] -- <cms-cli-args...>
   cms-playground setup agent    [--agent <id>] [--project] [--yes] [--skip-mcp] [--dry-run]
+  cms-playground mcp            [--cwd=<path>]
   cms-playground list
   cms-playground map            [--json | --paths]
 
@@ -64,6 +66,7 @@ Commands:
   build-snapshot  Boot a CMS, optionally run a Blueprint, and export a .zip snapshot
   cli             Run the CMS's native CLI (e.g. cli/joomla.php) in PHP-WASM
   setup agent     Install the bundled Agent Skill and configure MCP for coding agents
+  mcp             Start a local stdio MCP server for coding agents
   list            Show registered CMS adapters and supported PHP versions
   map             Output a machine-readable catalog of commands, adapters, and Blueprint steps
 
@@ -114,12 +117,17 @@ export function isAgentMode(env = process.env) {
  * Lightweight check for JSON output mode that works even when full argument parsing fails.
  */
 export function wantsJsonOutput(argv = [], env = process.env) {
+  const dashDash = argv.indexOf('--');
+  const mainArgs = dashDash === -1 ? argv : argv.slice(0, dashDash);
+
+  // `mcp` speaks JSON-RPC 2.0 on stdio, not CLI --json receipts.
+  if (mainArgs.includes('mcp')) {
+    return false;
+  }
+
   if (isAgentMode(env)) {
     return true;
   }
-
-  const dashDash = argv.indexOf('--');
-  const mainArgs = dashDash === -1 ? argv : argv.slice(0, dashDash);
 
   return mainArgs.includes('--json');
 }
@@ -454,7 +462,7 @@ export async function run(argv = process.argv.slice(2), { env = process.env, cwd
     if (options.json) {
       emitJson({
         help: HELP_TEXT,
-        commands: ['start', 'run-blueprint', 'build-snapshot', 'cli', 'setup agent', 'list', 'map'],
+        commands: ['start', 'run-blueprint', 'build-snapshot', 'cli', 'setup agent', 'mcp', 'list', 'map'],
       });
     } else {
       console.log(HELP_TEXT);
@@ -545,6 +553,10 @@ export async function run(argv = process.argv.slice(2), { env = process.env, cwd
     }
 
     return EXIT_CODES.OK;
+  }
+
+  if (command === 'mcp') {
+    return await runMcpServer({ cwd: baseDir });
   }
 
   if (!cms) {

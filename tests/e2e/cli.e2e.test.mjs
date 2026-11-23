@@ -778,5 +778,113 @@ describe('CLI E2E: --json receipts, agent mode, --cwd, and classified exit codes
     assert.ok(lines.includes('cms-playground start --joomla'));
     assert.ok(lines.includes('cms-playground start --wp'));
     assert.ok(lines.includes('cms-playground map --paths'));
+    assert.ok(lines.includes('cms-playground mcp'));
+  });
+});
+
+describe('CLI E2E: local stdio MCP server (cms-playground mcp)', () => {
+  it('speaks MCP JSON-RPC over stdio, runs real PHP-WASM tools, and cleans up on stdin close', async () => {
+    const tmp = createTempDir('e2e-mcp-');
+    try {
+      createMockJoomlaSite(tmp.dir);
+
+      const child = spawn(process.execPath, [CLI_BIN, 'mcp'], {
+        env: { ...process.env, CMS_PLAYGROUND_AGENT: '1' },
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+
+      const pending = new Map();
+      let buffer = '';
+      let stderr = '';
+
+      child.stdout.on('data', (chunk) => {
+        buffer += chunk.toString('utf8');
+        let idx;
+        while ((idx = buffer.indexOf('\n')) !== -1) {
+          const line = buffer.slice(0, idx).trim();
+          buffer = buffer.slice(idx + 1);
+          if (!line) continue;
+          const msg = JSON.parse(line);
+          const resolver = pending.get(msg.id);
+          if (resolver) {
+            pending.delete(msg.id);
+            resolver(msg);
+          }
+        }
+      });
+      child.stderr.on('data', (chunk) => {
+        stderr += chunk.toString('utf8');
+      });
+
+      const sendRequest = (id, method, params = {}) =>
+        new Promise((resolveReq, rejectReq) => {
+          const timer = setTimeout(() => {
+            pending.delete(id);
+            rejectReq(new Error(`MCP request ${method} timed out. STDERR:\n${stderr}`));
+          }, 30_000);
+          pending.set(id, (msg) => {
+            clearTimeout(timer);
+            resolveReq(msg);
+          });
+          child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id, method, params })}\n`);
+        });
+
+      const exitPromise = new Promise((resolveExit) => {
+        child.once('exit', (code, signal) => resolveExit({ code, signal }));
+      });
+
+      let startedUrl = null;
+      try {
+        const init = await sendRequest(1, 'initialize', {
+          protocolVersion: '2024-11-05',
+          capabilities: {},
+          clientInfo: { name: 'e2e-client', version: '1.0.0' },
+        });
+        assert.equal(init.result.serverInfo.name, 'cms-playground');
+
+        child.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' })}\n`);
+
+        const toolsRes = await sendRequest(2, 'tools/list');
+        assert.equal(toolsRes.result.tools.length, 7);
+
+        const startRes = await sendRequest(3, 'tools/call', {
+          name: 'start_playground',
+          arguments: { cms: 'joomla', site: tmp.dir, php: '8.4' },
+        });
+        assert.equal(startRes.result.isError, false, startRes.result.content[0].text);
+        const started = JSON.parse(startRes.result.content[0].text);
+        startedUrl = started.url;
+        assert.equal(started.id, 'pg_1');
+        assert.match(started.url, /^http:\/\/127\.0\.0\.1:\d+$/);
+
+        const fetchRes = await sendRequest(4, 'tools/call', {
+          name: 'fetch_page',
+          arguments: { id: 'pg_1', path: '/' },
+        });
+        assert.equal(fetchRes.result.isError, false);
+        const fetched = JSON.parse(fetchRes.result.content[0].text);
+        assert.equal(fetched.status, 200);
+        assert.equal(JSON.parse(fetched.body).cms, 'joomla-fixture');
+
+        const logsRes = await sendRequest(5, 'tools/call', {
+          name: 'read_php_logs',
+          arguments: { id: 'pg_1', tail: 20 },
+        });
+        const logs = JSON.parse(logsRes.result.content[0].text);
+        assert.ok(logs.lines.length >= 1);
+      } finally {
+        // Close stdin without calling stop_playground to verify automatic cleanup.
+        child.stdin.end();
+      }
+
+      const exit = await exitPromise;
+      assert.equal(exit.code, 0, `Expected exit 0, got ${exit.code}. STDERR:\n${stderr}`);
+
+      if (startedUrl) {
+        await assert.rejects(() => fetch(startedUrl));
+      }
+    } finally {
+      tmp.cleanup();
+    }
   });
 });
