@@ -7,6 +7,7 @@ import {
   DOCUMENT_ROOT,
   fetchCachedBytes,
   moveDirectoryContents,
+  phpSingleQuote,
   runPhpCode,
 } from '@cms-playground/core';
 
@@ -44,7 +45,7 @@ const blueprintSteps = {
       `
       $data = json_decode(file_get_contents('/tmp/kirby-title.json'), true);
       unlink('/tmp/kirby-title.json');
-      $file = ${JSON.stringify(context.documentRoot)} . '/content/site.txt';
+      $file = ${phpSingleQuote(context.documentRoot)} . '/content/site.txt';
       $content = file_exists($file) ? file_get_contents($file) : '';
       $title = str_replace(["\\r", "\\n"], ' ', $data['title']);
       if (preg_match('/^Title\\s*:.*$/mi', $content)) {
@@ -81,7 +82,7 @@ const blueprintSteps = {
       `
       $data = json_decode(file_get_contents('/tmp/kirby-page.json'), true);
       unlink('/tmp/kirby-page.json');
-      $dir = ${JSON.stringify(context.documentRoot)} . '/content/' . $data['slug'];
+      $dir = ${phpSingleQuote(context.documentRoot)} . '/content/' . $data['slug'];
       @mkdir($dir, 0777, true);
       $fields = array_merge(['Title' => $data['title']], is_array($data['content']) ? $data['content'] : []);
       $chunks = [];

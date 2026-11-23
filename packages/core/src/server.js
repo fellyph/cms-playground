@@ -542,8 +542,16 @@ export async function startPlayground({
   try {
     const serialized = createRequestQueue();
     const staticCacheDir = adapter.serveStatic ? getCacheDir(adapter.name) : null;
+    let isClosing = false;
 
     handleRequest = async (request, response) => {
+      if (isClosing) {
+        response.statusCode = 503;
+        response.setHeader('content-type', 'text/plain; charset=utf-8');
+        response.end(request.method === 'HEAD' ? undefined : 'Server is shutting down.\n');
+        return;
+      }
+
       const started = performance.now();
 
       try {
@@ -621,7 +629,9 @@ export async function startPlayground({
       mounts: booted.mounts,
       php,
       close: async () => {
+        isClosing = true;
         await closeHttpServer(server);
+        await serialized(() => {}).catch(() => {});
         try {
           php.exit();
         } catch {}

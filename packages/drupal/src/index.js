@@ -7,6 +7,7 @@ import {
   DOCUMENT_ROOT,
   fetchCachedBytes,
   moveDirectoryContents,
+  phpSingleQuote,
   runPhpCode,
 } from '@cms-playground/core';
 
@@ -56,7 +57,7 @@ const blueprintSteps = {
       `
       $data = json_decode(file_get_contents('/tmp/drupal-sitename.json'), true);
       unlink('/tmp/drupal-sitename.json');
-      ${drupalBootstrapSnippet(JSON.stringify(context.documentRoot))}
+      ${drupalBootstrapSnippet(phpSingleQuote(context.documentRoot))}
       \\Drupal::configFactory()->getEditable('system.site')->set('name', $data['name'])->save();
       drupal_flush_all_caches();
       `
@@ -71,8 +72,8 @@ const blueprintSteps = {
     await runPhpCode(
       context.php,
       `
-      ${drupalBootstrapSnippet(JSON.stringify(context.documentRoot))}
-      \\Drupal::service('module_installer')->install([${JSON.stringify(String(module))}]);
+      ${drupalBootstrapSnippet(phpSingleQuote(context.documentRoot))}
+      \\Drupal::service('module_installer')->install([${phpSingleQuote(String(module))}]);
       `
     );
   },
@@ -275,8 +276,8 @@ export function detectDrupalAutoMount(dir) {
           await runPhpCode(
             php,
             `
-            ${drupalBootstrapSnippet(JSON.stringify(documentRoot))}
-            \\Drupal::service('module_installer')->install([${JSON.stringify(machineName)}]);
+            ${drupalBootstrapSnippet(phpSingleQuote(documentRoot))}
+            \\Drupal::service('module_installer')->install([${phpSingleQuote(machineName)}]);
             `
           );
         },
@@ -293,9 +294,9 @@ export function detectDrupalAutoMount(dir) {
           await runPhpCode(
             php,
             `
-            ${drupalBootstrapSnippet(JSON.stringify(documentRoot))}
-            \\Drupal::service('theme_installer')->install([${JSON.stringify(machineName)}]);
-            \\Drupal::configFactory()->getEditable('system.theme')->set('default', ${JSON.stringify(machineName)})->save();
+            ${drupalBootstrapSnippet(phpSingleQuote(documentRoot))}
+            \\Drupal::service('theme_installer')->install([${phpSingleQuote(machineName)}]);
+            \\Drupal::configFactory()->getEditable('system.theme')->set('default', ${phpSingleQuote(machineName)})->save();
             `
           );
         },

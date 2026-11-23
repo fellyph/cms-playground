@@ -4,7 +4,13 @@
 import { randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { basename, dirname, extname, join, resolve, sep } from 'node:path';
-import { DOCUMENT_ROOT, fetchCachedBytes, runPhpCode } from '@cms-playground/core';
+import {
+  DEFAULT_FETCH_TIMEOUT_MS,
+  DOCUMENT_ROOT,
+  fetchCachedBytes,
+  phpSingleQuote,
+  runPhpCode,
+} from '@cms-playground/core';
 
 const DEFAULT_PLAYGROUND_URL = 'https://joomla-projects.github.io/joomla-playground/';
 
@@ -64,7 +70,7 @@ const blueprintSteps = {
       `
       $values = json_decode(file_get_contents('/tmp/joomla-config.json'), true);
       unlink('/tmp/joomla-config.json');
-      $file = ${JSON.stringify(context.documentRoot)} . '/configuration.php';
+      $file = ${phpSingleQuote(context.documentRoot)} . '/configuration.php';
       $config = file_get_contents($file);
       foreach ($values as $key => $value) {
           if (!is_string($key) || !preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $key)) {
@@ -91,7 +97,7 @@ const blueprintSteps = {
       context.php,
       `
       define('_JEXEC', 1);
-      define('JPATH_BASE', ${JSON.stringify(context.documentRoot)} . '/administrator');
+      define('JPATH_BASE', ${phpSingleQuote(context.documentRoot)} . '/administrator');
       if (is_file(JPATH_BASE . '/defines.php')) {
           include_once JPATH_BASE . '/defines.php';
       }
@@ -141,7 +147,10 @@ export const joomlaAdapter = {
   async resolveBundle({ version, cacheDir, log }) {
     const baseUrl = playgroundBaseUrl();
     const versionsUrl = new URL('joomla/versions.json', baseUrl).href;
-    const versionsResponse = await fetch(versionsUrl, { redirect: 'follow' });
+    const versionsResponse = await fetch(versionsUrl, {
+      redirect: 'follow',
+      signal: AbortSignal.timeout(DEFAULT_FETCH_TIMEOUT_MS),
+    });
 
     if (!versionsResponse.ok) {
       throw new Error(`Cannot fetch Joomla versions list (${versionsUrl}): HTTP ${versionsResponse.status}`);
@@ -269,7 +278,10 @@ export const joomlaAdapter = {
     }
 
     const remoteUrl = new URL(relPath, bundle.mediaBaseUrl).href;
-    const response = await fetch(remoteUrl, { redirect: 'follow' });
+    const response = await fetch(remoteUrl, {
+      redirect: 'follow',
+      signal: AbortSignal.timeout(DEFAULT_FETCH_TIMEOUT_MS),
+    });
 
     if (!response.ok) {
       return null;
@@ -376,7 +388,7 @@ export function detectJoomlaAutoMount(dir) {
           php,
           `
           define('_JEXEC', 1);
-          define('JPATH_BASE', ${JSON.stringify(documentRoot)} . '/administrator');
+          define('JPATH_BASE', ${phpSingleQuote(documentRoot)} . '/administrator');
           if (is_file(JPATH_BASE . '/defines.php')) {
               include_once JPATH_BASE . '/defines.php';
           }
@@ -402,7 +414,7 @@ export function detectJoomlaAutoMount(dir) {
               ->select($db->quoteName('extension_id'))
               ->from($db->quoteName('#__extensions'))
               ->where($db->quoteName('state') . ' = -1')
-              ->where($db->quoteName('element') . ' = ' . $db->quote(${JSON.stringify(element)}));
+              ->where($db->quoteName('element') . ' = ' . $db->quote(${phpSingleQuote(element)}));
           $extIds = $db->setQuery($query)->loadColumn();
           foreach ($extIds as $id) {
               $installer->discover_install((int) $id);

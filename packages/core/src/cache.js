@@ -15,7 +15,7 @@ import { homedir } from 'node:os';
 import { dirname, join, resolve, sep } from 'node:path';
 import { EXIT_CODES, PlaygroundError } from './errors.js';
 
-const DEFAULT_FETCH_TIMEOUT_MS = 60_000;
+export const DEFAULT_FETCH_TIMEOUT_MS = 60_000;
 const CACHE_BUCKET_RE = /^[a-z0-9][a-z0-9_-]*$/i;
 
 /**

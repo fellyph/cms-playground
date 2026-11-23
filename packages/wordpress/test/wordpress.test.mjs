@@ -122,7 +122,7 @@ describe('@cms-playground/wordpress', () => {
         'LOGGED_IN_SALT',
         'NONCE_SALT',
       ]) {
-        assert.match(wpConfig, new RegExp(`define\\('${key}', "[0-9a-f]{64}"\\);`));
+        assert.match(wpConfig, new RegExp(`define\\('${key}', '[0-9a-f]{64}'\\);`));
       }
 
       // HTTP_HOST must not have a trailing colon and SERVER_PORT defaults to 443 for https
