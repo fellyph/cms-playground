@@ -479,7 +479,7 @@ describe('CLI E2E: setup agent', () => {
 
       const dryRun = await runCliProcess(['setup', 'agent', '--project', '--dry-run'], {
         cwd: projectDir,
-        env: { HOME: homeDir },
+        env: { HOME: homeDir, USERPROFILE: homeDir },
       });
 
       assert.equal(dryRun.exitCode, 0, dryRun.stderr);
@@ -488,7 +488,7 @@ describe('CLI E2E: setup agent', () => {
 
       const applied = await runCliProcess(['setup', 'agent', '-y', '--project'], {
         cwd: projectDir,
-        env: { HOME: homeDir },
+        env: { HOME: homeDir, USERPROFILE: homeDir },
       });
 
       assert.equal(applied.exitCode, 0, applied.stderr);
