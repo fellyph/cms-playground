@@ -28,8 +28,8 @@ test('buildSite outputs complete static bundle with .nojekyll and CLI version', 
 
     const html = await fs.readFile(path.join(tmpDir, 'index.html'), 'utf8');
     assert.match(html, new RegExp(`PHP-WASM CLI v${result.version.replaceAll('.', '\\.')}`));
-    assert.match(html, /npx cms-playground start --joomla/);
-    assert.match(html, /npx cms-playground start --wp/);
+    assert.match(html, /npx @cms-playground\/cli start --joomla/);
+    assert.match(html, /npx @cms-playground\/cli start --wp/);
     assert.match(html, /AGENTS\.md/);
   } finally {
     await fs.rm(tmpDir, { recursive: true, force: true });

@@ -18,6 +18,9 @@
     "test:e2e:joomla": "node --test --test-timeout=240000 tests/e2e/joomla.e2e.test.mjs",
     "test:e2e:wp": "node --test --test-timeout=240000 tests/e2e/wordpress.e2e.test.mjs",
     "start:joomla": "node packages/cli/bin/cms-playground.mjs start --joomla",
-    "start:wp": "node packages/cli/bin/cms-playground.mjs start --wp"
+    "start:wp": "node packages/cli/bin/cms-playground.mjs start --wp",
+    "release:preview": "npm pack --dry-run --workspaces",
+    "release:patch": "npm version patch --workspaces --no-git-tag-version --workspaces-update=false && node scripts/sync-workspace-dependencies.mjs && npm install --package-lock-only --ignore-scripts",
+    "release:publish": "node scripts/publish-workspaces.mjs"
   }
 }

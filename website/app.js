@@ -214,7 +214,7 @@ function generateBuilderOutput() {
     cmsVersion && cmsVersion.toLowerCase() !== "latest" ? `${cmsFlag}=${cmsVersion}` : cmsFlag;
   const cmsName = cms === "wp" ? "WordPress" : "Joomla";
 
-  const parts = ["npx cms-playground", command, cmsWithVersion];
+  const parts = ["npx @cms-playground/cli", command, cmsWithVersion];
   if (php && php !== "8.4") parts.push(`--php=${php}`);
   if (command === "start" && port && port !== "8790") parts.push(`--port=${port}`);
   if (command !== "cli" && autoMount) parts.push("--auto-mount");
@@ -346,19 +346,19 @@ const AGENT_RULES = {
     filename: "AGENTS.md",
     content: `# Local CMS Verification with @cms-playground
 
-Use \`@cms-playground\` to verify Joomla extensions and WordPress plugins/themes in a clean local PHP-WASM sandbox (Node.js 22+, no local PHP or MySQL required).
+Use \`@cms-playground\` to verify Joomla extensions and WordPress plugins/themes in a clean local PHP-WASM sandbox (Node.js 24.18+, no local PHP or MySQL required).
 
 ## Standard Workflows
 - **Boot & auto-mount Joomla extension:**
-  \`npx cms-playground start --joomla --auto-mount --port=0\`
+  \`npx @cms-playground/cli start --joomla --auto-mount --port=0\`
 - **Boot & auto-mount WordPress plugin/theme:**
-  \`npx cms-playground start --wp --auto-mount --port=0\`
+  \`npx @cms-playground/cli start --wp --auto-mount --port=0\`
 - **Run a headless Blueprint (CI / smoke tests):**
-  \`npx cms-playground run-blueprint --joomla --blueprint=./blueprint.json --verbosity=debug\`
+  \`npx @cms-playground/cli run-blueprint --joomla --blueprint=./blueprint.json --verbosity=debug\`
 - **Export a portable snapshot:**
-  \`npx cms-playground build-snapshot --wp --blueprint=./blueprint.json --output=./snapshot.zip\`
+  \`npx @cms-playground/cli build-snapshot --wp --blueprint=./blueprint.json --output=./snapshot.zip\`
 - **Run Joomla native CLI without local PHP:**
-  \`npx cms-playground cli --joomla -- user:list\`
+  \`npx @cms-playground/cli cli --joomla -- user:list\`
 
 ## Agent Rules
 1. Always prefer \`--port=0\` or an explicit free port so parallel runs never collide.
@@ -369,17 +369,17 @@ Use \`@cms-playground\` to verify Joomla extensions and WordPress plugins/themes
     filename: "CLAUDE.md",
     content: `# Claude Code — @cms-playground Guide
 
-When testing Joomla or WordPress code in this repository, use \`npx cms-playground\` instead of asking the user to start Docker, MAMP, or local PHP.
+When testing Joomla or WordPress code in this repository, use \`npx @cms-playground/cli\` instead of asking the user to start Docker, MAMP, or local PHP.
 
 ## Commands
 - Start Joomla with auto-mounted extension:
-  \`npx cms-playground start --joomla --auto-mount --port=8790\`
+  \`npx @cms-playground/cli start --joomla --auto-mount --port=8790\`
 - Start WordPress with auto-mounted plugin/theme:
-  \`npx cms-playground start --wp --auto-mount --port=8791\`
+  \`npx @cms-playground/cli start --wp --auto-mount --port=8791\`
 - Headless Blueprint verification:
-  \`npx cms-playground run-blueprint --wp --blueprint=./blueprint.json\`
+  \`npx @cms-playground/cli run-blueprint --wp --blueprint=./blueprint.json\`
 - Joomla CLI commands:
-  \`npx cms-playground cli --joomla -- cache:clean\`
+  \`npx @cms-playground/cli cli --joomla -- cache:clean\`
 
 ## Verification Checklist
 - Confirm \`--auto-mount\` detects the manifest/header cleanly.
@@ -397,8 +397,8 @@ alwaysApply: false
 # @cms-playground Testing Rules
 
 - Never assume local PHP, Apache, or MySQL is installed.
-- Boot a disposable sandbox via \`npx cms-playground start --joomla --auto-mount\` or \`npx cms-playground start --wp --auto-mount\`.
-- For non-interactive checks, write a \`blueprint.json\` with \`runPHP\` / \`runSql\` / \`setSiteOption\` steps and execute \`npx cms-playground run-blueprint\`.
+- Boot a disposable sandbox via \`npx @cms-playground/cli start --joomla --auto-mount\` or \`npx @cms-playground/cli start --wp --auto-mount\`.
+- For non-interactive checks, write a \`blueprint.json\` with \`runPHP\` / \`runSql\` / \`setSiteOption\` steps and execute \`npx @cms-playground/cli run-blueprint\`.
 - Use \`--verbosity=debug\` when diagnosing boot or mount failures.`,
   },
   skill: {
@@ -411,11 +411,11 @@ description: Boot disposable Joomla and WordPress instances in PHP-WASM using @c
 # @cms-playground Testing Skill
 
 ## Quick Commands
-- \`npx cms-playground list\` — inspect available CMS adapters and PHP versions
-- \`npx cms-playground start --joomla --auto-mount\` — mount and discover a local Joomla extension
-- \`npx cms-playground start --wp --auto-mount\` — mount and activate a local WordPress plugin or theme
-- \`npx cms-playground run-blueprint --joomla --blueprint=./blueprint.json\` — headless verification
-- \`npx cms-playground build-snapshot --wp --output=./snapshot.zip\` — export a configured site archive
+- \`npx @cms-playground/cli list\` — inspect available CMS adapters and PHP versions
+- \`npx @cms-playground/cli start --joomla --auto-mount\` — mount and discover a local Joomla extension
+- \`npx @cms-playground/cli start --wp --auto-mount\` — mount and activate a local WordPress plugin or theme
+- \`npx @cms-playground/cli run-blueprint --joomla --blueprint=./blueprint.json\` — headless verification
+- \`npx @cms-playground/cli build-snapshot --wp --output=./snapshot.zip\` — export a configured site archive
 
 ## Guardrails
 1. Read \`docs/BLUEPRINTS.md\` before authoring custom Blueprint steps.

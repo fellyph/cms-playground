@@ -150,14 +150,14 @@
             <div class="quick-command" aria-label="Quick start command">
               <div class="quick-command-label">
                 <span class="prompt-dollar" aria-hidden="true">$</span>
-                <code id="hero-cmd-text">npx cms-playground start --joomla --auto-mount</code>
+                <code id="hero-cmd-text">npx @cms-playground/cli start --joomla --auto-mount</code>
               </div>
               <div class="quick-command-actions">
                 <div class="cms-mini-toggle" role="group" aria-label="Quick command CMS">
                   <button
                     type="button"
                     class="mini-toggle-btn is-active"
-                    data-hero-cmd="npx cms-playground start --joomla --auto-mount"
+                    data-hero-cmd="npx @cms-playground/cli start --joomla --auto-mount"
                     aria-pressed="true"
                   >
                     Joomla
@@ -165,7 +165,7 @@
                   <button
                     type="button"
                     class="mini-toggle-btn"
-                    data-hero-cmd="npx cms-playground start --wp --auto-mount"
+                    data-hero-cmd="npx @cms-playground/cli start --wp --auto-mount"
                     aria-pressed="false"
                   >
                     WordPress
@@ -322,13 +322,13 @@
                   <button
                     type="button"
                     class="btn-copy-prompt"
-                    data-copy-text="Start a disposable Joomla sandbox using `npx cms-playground start --joomla --auto-mount --port=8790`. Confirm our local extension installs cleanly, request the homepage and `/administrator/`, verify HTTP 200 with no PHP fatal errors, and report the live URL and credentials."
+                    data-copy-text="Start a disposable Joomla sandbox using `npx @cms-playground/cli start --joomla --auto-mount --port=8790`. Confirm our local extension installs cleanly, request the homepage and `/administrator/`, verify HTTP 200 with no PHP fatal errors, and report the live URL and credentials."
                   >
                     Copy prompt
                   </button>
                 </div>
                 <p class="prompt-text">
-                  “Start a disposable Joomla sandbox using <code>npx cms-playground start --joomla --auto-mount --port=8790</code>.
+                  “Start a disposable Joomla sandbox using <code>npx @cms-playground/cli start --joomla --auto-mount --port=8790</code>.
                   Confirm our local extension installs cleanly, request the homepage and <code>/administrator/</code>,
                   verify HTTP 200 with no PHP fatal errors, and report the live URL and credentials.”
                 </p>
@@ -341,13 +341,13 @@
                         <button
                           type="button"
                           class="code-copy-btn"
-                          data-copy-text="npx cms-playground start --joomla --auto-mount --port=8790"
+                          data-copy-text="npx @cms-playground/cli start --joomla --auto-mount --port=8790"
                           aria-label="Copy Bash command"
                         >
                           Copy
                         </button>
                       </div>
-                      <pre><code>npx cms-playground start --joomla --auto-mount --port=8790</code></pre>
+                      <pre><code>npx @cms-playground/cli start --joomla --auto-mount --port=8790</code></pre>
                     </div>
                   </div>
                 </details>
@@ -363,14 +363,14 @@
                   <button
                     type="button"
                     class="btn-copy-prompt"
-                    data-copy-text="Boot a local WordPress 6.7 playground on PHP 8.4 with our current directory mounted via `npx cms-playground start --wp=6.7 --php=8.4 --auto-mount --port=8791`. Verify the plugin or theme activates without warnings, check the rendered HTML, and summarize any PHP notices."
+                    data-copy-text="Boot a local WordPress 6.7 playground on PHP 8.4 with our current directory mounted via `npx @cms-playground/cli start --wp=6.7 --php=8.4 --auto-mount --port=8791`. Verify the plugin or theme activates without warnings, check the rendered HTML, and summarize any PHP notices."
                   >
                     Copy prompt
                   </button>
                 </div>
                 <p class="prompt-text">
                   “Boot a local WordPress 6.7 playground on PHP 8.4 with our current directory mounted via
-                  <code>npx cms-playground start --wp=6.7 --php=8.4 --auto-mount --port=8791</code>. Verify the
+                  <code>npx @cms-playground/cli start --wp=6.7 --php=8.4 --auto-mount --port=8791</code>. Verify the
                   plugin or theme activates without warnings, check the rendered HTML, and summarize any PHP notices.”
                 </p>
                 <details class="prompt-details">
@@ -382,13 +382,13 @@
                         <button
                           type="button"
                           class="code-copy-btn"
-                          data-copy-text="npx cms-playground start --wp=6.7 --php=8.4 --auto-mount --port=8791"
+                          data-copy-text="npx @cms-playground/cli start --wp=6.7 --php=8.4 --auto-mount --port=8791"
                           aria-label="Copy Bash command"
                         >
                           Copy
                         </button>
                       </div>
-                      <pre><code>npx cms-playground start --wp=6.7 --php=8.4 --auto-mount --port=8791</code></pre>
+                      <pre><code>npx @cms-playground/cli start --wp=6.7 --php=8.4 --auto-mount --port=8791</code></pre>
                     </div>
                   </div>
                 </details>
@@ -404,7 +404,7 @@
                   <button
                     type="button"
                     class="btn-copy-prompt"
-                    data-copy-text="Write a `blueprint.json` that enables debug mode, configures the site title, and runs a PHP smoke-test assertion via `runPHP`. Execute it headlessly with `npx cms-playground run-blueprint --joomla --blueprint=./blueprint.json --verbosity=debug` and fix any failing steps."
+                    data-copy-text="Write a `blueprint.json` that enables debug mode, configures the site title, and runs a PHP smoke-test assertion via `runPHP`. Execute it headlessly with `npx @cms-playground/cli run-blueprint --joomla --blueprint=./blueprint.json --verbosity=debug` and fix any failing steps."
                   >
                     Copy prompt
                   </button>
@@ -412,7 +412,7 @@
                 <p class="prompt-text">
                   “Write a <code>blueprint.json</code> that enables debug mode, configures the site title, and
                   runs a PHP smoke-test assertion via <code>runPHP</code>. Execute it headlessly with
-                  <code>npx cms-playground run-blueprint --joomla --blueprint=./blueprint.json --verbosity=debug</code>
+                  <code>npx @cms-playground/cli run-blueprint --joomla --blueprint=./blueprint.json --verbosity=debug</code>
                   and fix any failing steps.”
                 </p>
                 <details class="prompt-details">
@@ -424,13 +424,13 @@
                         <button
                           type="button"
                           class="code-copy-btn"
-                          data-copy-text="npx cms-playground run-blueprint --joomla --blueprint=./blueprint.json --verbosity=debug"
+                          data-copy-text="npx @cms-playground/cli run-blueprint --joomla --blueprint=./blueprint.json --verbosity=debug"
                           aria-label="Copy Bash command"
                         >
                           Copy
                         </button>
                       </div>
-                      <pre><code>npx cms-playground run-blueprint --joomla --blueprint=./blueprint.json --verbosity=debug</code></pre>
+                      <pre><code>npx @cms-playground/cli run-blueprint --joomla --blueprint=./blueprint.json --verbosity=debug</code></pre>
                     </div>
                   </div>
                 </details>
@@ -446,14 +446,14 @@
                   <button
                     type="button"
                     class="btn-copy-prompt"
-                    data-copy-text="Build a reproducible site snapshot by running `npx cms-playground build-snapshot --wp --blueprint=./blueprint.json --output=./dist/site-snapshot.zip`. Verify the archive exists, inspect its size, and list the top-level files inside the zip."
+                    data-copy-text="Build a reproducible site snapshot by running `npx @cms-playground/cli build-snapshot --wp --blueprint=./blueprint.json --output=./dist/site-snapshot.zip`. Verify the archive exists, inspect its size, and list the top-level files inside the zip."
                   >
                     Copy prompt
                   </button>
                 </div>
                 <p class="prompt-text">
                   “Build a reproducible site snapshot by running
-                  <code>npx cms-playground build-snapshot --wp --blueprint=./blueprint.json --output=./dist/site-snapshot.zip</code>.
+                  <code>npx @cms-playground/cli build-snapshot --wp --blueprint=./blueprint.json --output=./dist/site-snapshot.zip</code>.
                   Verify the archive exists, inspect its size, and list the top-level files inside the zip.”
                 </p>
                 <details class="prompt-details">
@@ -465,13 +465,13 @@
                         <button
                           type="button"
                           class="code-copy-btn"
-                          data-copy-text="npx cms-playground build-snapshot --wp --blueprint=./blueprint.json --output=./dist/site-snapshot.zip"
+                          data-copy-text="npx @cms-playground/cli build-snapshot --wp --blueprint=./blueprint.json --output=./dist/site-snapshot.zip"
                           aria-label="Copy Bash command"
                         >
                           Copy
                         </button>
                       </div>
-                      <pre><code>npx cms-playground build-snapshot --wp --blueprint=./blueprint.json --output=./dist/site-snapshot.zip</code></pre>
+                      <pre><code>npx @cms-playground/cli build-snapshot --wp --blueprint=./blueprint.json --output=./dist/site-snapshot.zip</code></pre>
                     </div>
                   </div>
                 </details>
@@ -487,13 +487,13 @@
                   <button
                     type="button"
                     class="btn-copy-prompt"
-                    data-copy-text="Use `npx cms-playground cli --joomla -- user:list` to inspect the registered Joomla users without requiring local PHP. If we have a persistent local site folder at `./my-joomla-site`, pass `--site=./my-joomla-site` and run `cache:clean` afterwards."
+                    data-copy-text="Use `npx @cms-playground/cli cli --joomla -- user:list` to inspect the registered Joomla users without requiring local PHP. If we have a persistent local site folder at `./my-joomla-site`, pass `--site=./my-joomla-site` and run `cache:clean` afterwards."
                   >
                     Copy prompt
                   </button>
                 </div>
                 <p class="prompt-text">
-                  “Use <code>npx cms-playground cli --joomla -- user:list</code> to inspect the registered
+                  “Use <code>npx @cms-playground/cli cli --joomla -- user:list</code> to inspect the registered
                   Joomla users without requiring local PHP. If we have a persistent local site folder at
                   <code>./my-joomla-site</code>, pass <code>--site=./my-joomla-site</code> and run
                   <code>cache:clean</code> afterwards.”
@@ -507,13 +507,13 @@
                         <button
                           type="button"
                           class="code-copy-btn"
-                          data-copy-text="npx cms-playground cli --joomla -- user:list"
+                          data-copy-text="npx @cms-playground/cli cli --joomla -- user:list"
                           aria-label="Copy Bash command"
                         >
                           Copy
                         </button>
                       </div>
-                      <pre><code>npx cms-playground cli --joomla -- user:list</code></pre>
+                      <pre><code>npx @cms-playground/cli cli --joomla -- user:list</code></pre>
                     </div>
                   </div>
                 </details>
@@ -529,14 +529,14 @@
                   <button
                     type="button"
                     class="btn-copy-prompt"
-                    data-copy-text="Mount `./overlay` before WordPress configures its environment using `npx cms-playground start --wp --mount-before-install=./overlay:/var/www/html/wp-content/mu-plugins --port=8792`, then verify our must-use plugin executes on the first request."
+                    data-copy-text="Mount `./overlay` before WordPress configures its environment using `npx @cms-playground/cli start --wp --mount-before-install=./overlay:/var/www/html/wp-content/mu-plugins --port=8792`, then verify our must-use plugin executes on the first request."
                   >
                     Copy prompt
                   </button>
                 </div>
                 <p class="prompt-text">
                   “Mount <code>./overlay</code> before WordPress configures its environment using
-                  <code>npx cms-playground start --wp --mount-before-install=./overlay:/var/www/html/wp-content/mu-plugins --port=8792</code>,
+                  <code>npx @cms-playground/cli start --wp --mount-before-install=./overlay:/var/www/html/wp-content/mu-plugins --port=8792</code>,
                   then verify our must-use plugin executes on the first request.”
                 </p>
                 <details class="prompt-details">
@@ -548,13 +548,13 @@
                         <button
                           type="button"
                           class="code-copy-btn"
-                          data-copy-text="npx cms-playground start --wp --mount-before-install=./overlay:/var/www/html/wp-content/mu-plugins --port=8792"
+                          data-copy-text="npx @cms-playground/cli start --wp --mount-before-install=./overlay:/var/www/html/wp-content/mu-plugins --port=8792"
                           aria-label="Copy Bash command"
                         >
                           Copy
                         </button>
                       </div>
-                      <pre><code>npx cms-playground start --wp --mount-before-install=./overlay:/var/www/html/wp-content/mu-plugins --port=8792</code></pre>
+                      <pre><code>npx @cms-playground/cli start --wp --mount-before-install=./overlay:/var/www/html/wp-content/mu-plugins --port=8792</code></pre>
                     </div>
                   </div>
                 </details>
@@ -732,7 +732,7 @@
                     <span class="code-lang">Bash</span>
                     <button type="button" class="code-copy-btn" data-copy-target="out-cli">Copy</button>
                   </div>
-                  <pre><code id="out-cli">npx cms-playground start --joomla --php=8.4 --port=8790 --auto-mount</code></pre>
+                  <pre><code id="out-cli">npx @cms-playground/cli start --joomla --php=8.4 --port=8790 --auto-mount</code></pre>
                 </div>
 
                 <div
@@ -824,7 +824,7 @@
               Test what agents make with <span class="text-accent">@cms-playground.</span>
             </h2>
             <p class="cta-lead">
-              Open source, GPL-2.0-or-later, Node.js 22+. Clone the workspace, run your first Joomla or
+              Open source, GPL-2.0-or-later, Node.js 24.18+. Clone the workspace, run your first Joomla or
               WordPress sandbox, or add a new CMS adapter.
             </p>
 

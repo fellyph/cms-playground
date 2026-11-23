@@ -5,10 +5,10 @@ A **Blueprint** is a JSON file describing how to configure a CMS playground auto
 Blueprints can be run with `start` (interactive server), `run-blueprint` (headless CI/automation), or `build-snapshot` (export a `.zip` after running):
 
 ```bash
-npx cms-playground start --joomla --blueprint=./blueprint.json
-npx cms-playground start --wp --blueprint=./wp-blueprint.json
-npx cms-playground run-blueprint --joomla --blueprint=./blueprint.json
-npx cms-playground build-snapshot --joomla --blueprint=./blueprint.json --output=./site.zip
+npx @cms-playground/cli start --joomla --blueprint=./blueprint.json
+npx @cms-playground/cli start --wp --blueprint=./wp-blueprint.json
+npx @cms-playground/cli run-blueprint --joomla --blueprint=./blueprint.json
+npx @cms-playground/cli build-snapshot --joomla --blueprint=./blueprint.json --output=./site.zip
 ```
 
 ---
