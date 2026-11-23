@@ -106,9 +106,9 @@ export async function startCliServer(
     }, startupTimeoutMs);
 
     const checkReady = () => {
-      const siteMatch = stdout.match(/^\s*Site:\s+(http:\/\/[^\s/]+)\/?$/m);
-      const adminMatch = stdout.match(/^\s*Admin:\s+(http:\/\/[^\s]+)$/m);
-      const loginMatch = stdout.match(/^\s*Login:\s+(\S+)\s+\/\s+(\S+)$/m);
+      const siteMatch = stdout.match(/^\s*Site:\s+(http:\/\/[^\s/]+)\/?\r?$/m);
+      const adminMatch = stdout.match(/^\s*Admin:\s+(http:\/\/[^\s]+)\r?$/m);
+      const loginMatch = stdout.match(/^\s*Login:\s+(\S+)\s+\/\s+(\S+)\r?$/m);
 
       if (siteMatch && adminMatch && loginMatch && stdout.includes('Press Ctrl+C to stop.')) {
         clearTimeout(timer);

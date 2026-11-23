@@ -46,7 +46,7 @@ describe('@cms-playground/cli setup-agent', () => {
     assert.equal(existsSync(blueprintsRef), true);
 
     const content = readFileSync(skillPath, 'utf8');
-    assert.match(content, /^---\n[\s\S]*name:\s*cms-playground[\s\S]*description:\s*".+"[\s\S]*---/);
+    assert.match(content, /^---\r?\n[\s\S]*name:\s*cms-playground[\s\S]*description:\s*".+"[\s\S]*---/);
   });
 
   it('rejects unknown agent selectors', () => {
@@ -222,11 +222,19 @@ describe('@cms-playground/cli setup-agent', () => {
     assert.match(readFileSync(skillFile, 'utf8'), /name:\s*cms-playground/);
   });
 
-  it('refuses symlinked MCP config files', async () => {
+  it('refuses symlinked MCP config files', async (t) => {
     const { root, homeDir, projectDir } = makeTempEnv();
     const realFile = join(root, 'target.json');
     writeFileSync(realFile, '{}', 'utf8');
-    symlinkSync(realFile, join(projectDir, '.mcp.json'));
+    try {
+      symlinkSync(realFile, join(projectDir, '.mcp.json'));
+    } catch (error) {
+      if (process.platform === 'win32' && error?.code === 'EPERM') {
+        t.skip('Creating file symlinks requires Developer Mode or elevated privileges on Windows');
+        return;
+      }
+      throw error;
+    }
 
     await assert.rejects(
       () =>
