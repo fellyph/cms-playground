@@ -12,6 +12,7 @@ const aliases = new Map();
  * @param {string[]} [adapter.aliases]    CLI flag aliases
  * @param {string} adapter.defaultPhp     Default PHP version (e.g. '8.4')
  * @param {string[]} adapter.supportedPhp Supported PHP versions
+ * @param {string[]} [adapter.phpExtensions] Additional PHP-WASM extensions to load for this CMS
  * @param {string} adapter.defaultVersion Default CMS version
  * @param {string} adapter.adminPath      Admin URL path (e.g. '/administrator/', '/wp-admin/')
  * @param {Function} adapter.resolveBundle

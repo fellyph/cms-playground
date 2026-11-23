@@ -36,4 +36,8 @@ Blueprints are declarative JSON files (`--blueprint=./blueprint.json` or an HTTP
   - `setSiteOption` (`option`, `value`) — calls `update_option($option, $value)`.
   - `activatePlugin` (`pluginPath`) — calls `activate_plugin($pluginPath)` (e.g. `hello-dolly/hello.php`).
 
+- **Drupal (`--drupal`)** supports `setSiteName` (name) and `enableModule` (module).
+- **TYPO3 (`--typo3`)** supports `setSiteName` (name).
+- **Kirby (`--kirby`)** supports `setSiteTitle` (title) and `createPage` (slug, optional title, template, and content).
+
 Run `cms-playground run-blueprint --joomla --blueprint=./blueprint.json --verbosity=debug` to trace each step during development.

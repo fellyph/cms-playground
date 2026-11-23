@@ -42,7 +42,7 @@ export function randomPassword(length = 12) {
 /**
  * Boots a @php-wasm/node PHP instance and releases its claimed process ID on exit or failure.
  */
-export async function bootPhp({ phpVersion = '8.4' } = {}) {
+export async function bootPhp({ phpVersion = '8.4', extensions = [] } = {}) {
   const processId = processIds.claim();
   let released = false;
   const releaseProcessId = () => {
@@ -56,6 +56,7 @@ export async function bootPhp({ phpVersion = '8.4' } = {}) {
   try {
     runtime = await loadNodeRuntime(phpVersion, {
       emscriptenOptions: { processId },
+      extensions,
     });
   } catch (error) {
     releaseProcessId();
@@ -188,6 +189,45 @@ export async function packZip(php, sourceDir = DOCUMENT_ROOT) {
       php.unlink(tmpPath);
     }
   }
+}
+
+/**
+ * Moves all files and subdirectories from srcDir into dstDir inside PHP's virtual filesystem.
+ * If srcDir contains a single top-level directory and unwrapSingleDir is true, moves that directory's contents.
+ */
+export async function moveDirectoryContents(php, srcDir, dstDir = DOCUMENT_ROOT, { unwrapSingleDir = false } = {}) {
+  await runPhpCode(
+    php,
+    `
+    $src = rtrim(base64_decode('${Buffer.from(srcDir).toString('base64')}'), '/');
+    $dst = rtrim(base64_decode('${Buffer.from(dstDir).toString('base64')}'), '/');
+    if (${unwrapSingleDir ? 'true' : 'false'}) {
+        $entries = array_values(array_filter(
+            scandir($src) ?: [],
+            fn ($e) => $e !== '.' && $e !== '..' && $e !== '__MACOSX'
+        ));
+        if (count($entries) === 1 && is_dir($src . '/' . $entries[0])) {
+            $src = $src . '/' . $entries[0];
+        }
+    }
+    @mkdir($dst, 0777, true);
+    $it = new RecursiveIteratorIterator(
+        new RecursiveDirectoryIterator($src, RecursiveDirectoryIterator::SKIP_DOTS),
+        RecursiveIteratorIterator::SELF_FIRST
+    );
+    foreach ($it as $item) {
+        $target = $dst . '/' . $it->getSubPathName();
+        if ($item->isDir()) {
+            @mkdir($target, 0777, true);
+        } else {
+            @mkdir(dirname($target), 0777, true);
+            if (!rename($item->getPathname(), $target)) {
+                throw new RuntimeException('Could not move bundle file: ' . $target);
+            }
+        }
+    }
+    `
+  );
 }
 
 /**

@@ -93,7 +93,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        cms: [joomla, wp]
+        cms: [joomla, wp, drupal, typo3, kirby]
 
     steps:
       - uses: actions/checkout@v4

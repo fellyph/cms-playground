@@ -120,3 +120,84 @@ npx @cms-playground/cli build-snapshot --joomla --blueprint=./blueprint.json --o
   ]
 }
 ```
+
+## Drupal Steps (`--drupal`)
+
+| Step | Properties | Description |
+|---|---|---|
+| `setSiteName` | `name` | Updates `system.site` `name` config and flushes caches |
+| `enableModule` | `module` | Installs and enables a Drupal module by machine name |
+
+### Example: Drupal Blueprint
+
+```json
+{
+  "preferredVersions": {
+    "php": "8.4",
+    "drupal": "latest"
+  },
+  "steps": [
+    {
+      "step": "setSiteName",
+      "name": "My Drupal Demo"
+    }
+  ]
+}
+```
+
+---
+
+## TYPO3 Steps (`--typo3`)
+
+| Step | Properties | Description |
+|---|---|---|
+| `setSiteName` | `name` | Updates `SYS.sitename` in `typo3conf/system/settings.php` |
+
+### Example: TYPO3 Blueprint
+
+```json
+{
+  "preferredVersions": {
+    "php": "8.4",
+    "typo3": "13"
+  },
+  "steps": [
+    {
+      "step": "setSiteName",
+      "name": "My TYPO3 Demo"
+    }
+  ]
+}
+```
+
+---
+
+## Kirby Steps (`--kirby`)
+
+| Step | Properties | Description |
+|---|---|---|
+| `setSiteTitle` | `title` | Updates `Title:` in `content/site.txt` |
+| `createPage` | `slug`, `title`, `template`, `content` | Creates a flat-file page in `content/<slug>/<template>.txt` |
+
+### Example: Kirby Blueprint
+
+```json
+{
+  "preferredVersions": {
+    "php": "8.4",
+    "kirby": "latest"
+  },
+  "steps": [
+    {
+      "step": "setSiteTitle",
+      "title": "My Kirby Demo"
+    },
+    {
+      "step": "createPage",
+      "slug": "welcome",
+      "title": "Welcome",
+      "template": "default"
+    }
+  ]
+}
+```

@@ -1,7 +1,7 @@
 {
   "name": "@cms-playground/cli",
   "version": "0.1.0",
-  "description": "Run Joomla, WordPress, and other PHP CMSs locally in WebAssembly with zero setup",
+  "description": "Run Joomla, WordPress, Drupal, TYPO3, and Kirby locally in WebAssembly with zero setup",
   "license": "GPL-2.0-or-later",
   "type": "module",
   "files": [
@@ -34,6 +34,9 @@
   "dependencies": {
     "@cms-playground/core": "0.1.0",
     "@cms-playground/joomla": "0.1.0",
-    "@cms-playground/wordpress": "0.1.0"
+    "@cms-playground/wordpress": "0.1.0",
+    "@cms-playground/drupal": "0.1.0",
+    "@cms-playground/typo3": "0.1.0",
+    "@cms-playground/kirby": "0.1.0"
   }
 }
