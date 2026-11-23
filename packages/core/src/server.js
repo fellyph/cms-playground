@@ -1,8 +1,17 @@
 // Core HTTP server, headless Blueprint runner, snapshot builder, and CMS CLI runner backed by @php-wasm/node.
 
 import http from 'node:http';
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
+import { homedir, tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { PHPRequestHandler } from '@php-wasm/universal';
 import { createNodeFsMountHandler } from '@php-wasm/node';
@@ -20,6 +29,176 @@ import {
   unpackZip,
 } from './runtime.js';
 
+const SITE_LOCK_FILE = '.cms-playground.lock';
+const SITE_MARKER_FILE = '.cms-playground-site.json';
+const RECOGNIZED_SITE_MARKERS = [
+  SITE_MARKER_FILE,
+  'configuration.php',
+  'wp-config.php',
+  'wp-load.php',
+  'sites/default/settings.php',
+  'kirby',
+  'public/typo3',
+  'index.php',
+];
+
+function isProcessAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) {
+    return false;
+  }
+
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error?.code === 'EPERM';
+  }
+}
+
+function acquireSiteLock(absSite, cms) {
+  const lockPath = join(absSite, SITE_LOCK_FILE);
+  const payload = JSON.stringify({
+    pid: process.pid,
+    cms,
+    startedAt: new Date().toISOString(),
+  });
+
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      writeFileSync(lockPath, payload, { flag: 'wx' });
+      break;
+    } catch (error) {
+      if (error?.code !== 'EEXIST') {
+        throw error;
+      }
+
+      let existing = null;
+      try {
+        existing = JSON.parse(readFileSync(lockPath, 'utf8'));
+      } catch {
+        // Corrupt lock file — treat as stale.
+      }
+
+      if (existing && isProcessAlive(existing.pid)) {
+        throw new PlaygroundError(
+          `Site directory is already in use by another cms-playground process (PID ${existing.pid}): ${absSite}`,
+          {
+            code: 'site_locked',
+            exitCode: EXIT_CODES.CONFLICT,
+            retryable: false,
+            suggestions: [
+              'Stop the other cms-playground process using this --site directory, or pass a different --site path.',
+            ],
+          }
+        );
+      }
+
+      // Stale lock from a dead process — remove and retry once.
+      try {
+        rmSync(lockPath, { force: true });
+      } catch {}
+
+      if (attempt === 1) {
+        throw new PlaygroundError(`Could not acquire site lock for ${absSite}`, {
+          code: 'site_locked',
+          exitCode: EXIT_CODES.CONFLICT,
+          retryable: true,
+        });
+      }
+    }
+  }
+
+  let released = false;
+
+  return {
+    lockPath,
+    release() {
+      if (released) {
+        return;
+      }
+      released = true;
+
+      try {
+        if (!existsSync(lockPath)) {
+          return;
+        }
+        const current = JSON.parse(readFileSync(lockPath, 'utf8'));
+        if (current?.pid === process.pid) {
+          rmSync(lockPath, { force: true });
+        }
+      } catch {
+        // Ignore cleanup errors.
+      }
+    },
+  };
+}
+
+function assertSafeResetTarget(absSite) {
+  const forbidden = new Set([dirname(absSite), resolve(homedir()), resolve(tmpdir())]);
+
+  if (forbidden.has(absSite)) {
+    throw new PlaygroundError(`Refusing to --reset protected directory: ${absSite}`, {
+      code: 'unsafe_site_reset',
+      exitCode: EXIT_CODES.VALIDATION,
+      suggestions: ['Pass a dedicated subdirectory for --site=<dir> when using --reset.'],
+    });
+  }
+
+  if (!existsSync(absSite)) {
+    return;
+  }
+
+  if (!lstatSync(absSite).isDirectory()) {
+    throw new PlaygroundError(`--site path is not a directory: ${absSite}`, {
+      code: 'unsafe_site_reset',
+      exitCode: EXIT_CODES.VALIDATION,
+    });
+  }
+
+  if (existsSync(join(absSite, '.git'))) {
+    throw new PlaygroundError(
+      `Refusing to --reset a Git repository directory: ${absSite}`,
+      {
+        code: 'unsafe_site_reset',
+        exitCode: EXIT_CODES.VALIDATION,
+        suggestions: ['Use a dedicated site directory outside your Git repository for --site --reset.'],
+      }
+    );
+  }
+
+  const entries = readdirSync(absSite).filter((name) => name !== SITE_LOCK_FILE);
+
+  if (entries.length === 0) {
+    return;
+  }
+
+  const looksLikeCmsSite = RECOGNIZED_SITE_MARKERS.some((marker) =>
+    existsSync(join(absSite, marker))
+  );
+
+  if (!looksLikeCmsSite) {
+    throw new PlaygroundError(
+      `Refusing to --reset "${absSite}" because it is non-empty and does not look like a CMS Playground site directory`,
+      {
+        code: 'unsafe_site_reset',
+        exitCode: EXIT_CODES.VALIDATION,
+        suggestions: [
+          'Verify the --site path or clear the directory manually before initializing it.',
+        ],
+      }
+    );
+  }
+}
+
+function clearSiteContentsExceptLock(absSite) {
+  for (const entry of readdirSync(absSite)) {
+    if (entry === SITE_LOCK_FILE) {
+      continue;
+    }
+    rmSync(join(absSite, entry), { recursive: true, force: true });
+  }
+}
+
 /**
  * Shared site bootstrap: loads blueprint (if any), boots PHP-WASM, mounts/unpacks the CMS,
  * applies mountsBeforeInstall -> adapter.configure() -> mounts -> blueprint steps.
@@ -30,6 +209,7 @@ async function bootSite({
   phpVersion = null,
   url = 'http://127.0.0.1:8790',
   site = null,
+  reset = false,
   stageDir = null,
   mountsBeforeInstall = [],
   mounts = [],
@@ -78,12 +258,26 @@ async function bootSite({
 
   const absSite = site ? resolve(site) : null;
 
-  if (absSite && !existsSync(absSite)) {
-    throw new PlaygroundError(`Site directory does not exist: ${absSite}`, {
-      code: 'site_not_found',
-      exitCode: EXIT_CODES.NOT_FOUND,
-      suggestions: ['Verify the --site directory path or omit --site to boot a fresh CMS bundle.'],
+  if (reset && !absSite) {
+    throw new PlaygroundError('--reset requires --site=<dir>', {
+      code: 'missing_option',
+      exitCode: EXIT_CODES.VALIDATION,
+      recovery: `cms-playground start --${adapter.name} --site=./my-site --reset`,
+      suggestions: ['Pass --site=<dir> together with --reset to re-initialize a persistent site directory.'],
     });
+  }
+
+  if (absSite) {
+    if (reset) {
+      assertSafeResetTarget(absSite);
+      mkdirSync(absSite, { recursive: true });
+    } else if (!existsSync(absSite)) {
+      throw new PlaygroundError(`Site directory does not exist: ${absSite}`, {
+        code: 'site_not_found',
+        exitCode: EXIT_CODES.NOT_FOUND,
+        suggestions: ['Verify the --site directory path or omit --site to boot a fresh CMS bundle.'],
+      });
+    }
   }
 
   const password = randomPassword();
@@ -118,18 +312,27 @@ async function bootSite({
     statusLog(`Auto-mount detected ${detectedAutoMount.kind} in ${targetDir}`);
   }
 
-  statusLog(`Booting PHP ${effectivePhp} (WebAssembly)...`);
-  const php = await bootPhp({ phpVersion: String(effectivePhp), extensions: adapter.phpExtensions });
+  const siteLock = absSite ? acquireSiteLock(absSite, adapter.name) : null;
+  let php = null;
 
   try {
+    if (absSite && reset) {
+      statusLog(`Resetting site directory ${absSite}...`);
+      clearSiteContentsExceptLock(absSite);
+    }
+
+    statusLog(`Booting PHP ${effectivePhp} (WebAssembly)...`);
+    php = await bootPhp({ phpVersion: String(effectivePhp), extensions: adapter.phpExtensions });
+
     let bundle = null;
 
-    if (absSite) {
+    if (absSite && !reset) {
       statusLog(`Mounting local site ${absSite}...`);
       await php.mount(DOCUMENT_ROOT, createNodeFsMountHandler(absSite));
     } else {
-      if (stageDir) {
-        await php.mount(DOCUMENT_ROOT, createNodeFsMountHandler(stageDir));
+      const mountHostDir = absSite ?? stageDir;
+      if (mountHostDir) {
+        await php.mount(DOCUMENT_ROOT, createNodeFsMountHandler(mountHostDir));
       }
 
       const cacheDir = getCacheDir(adapter.name);
@@ -154,10 +357,25 @@ async function bootSite({
       documentRoot: DOCUMENT_ROOT,
       url,
       password,
-      site: absSite,
+      site: reset ? null : absSite,
       bundle,
       log: statusLog,
     })) ?? {};
+
+    if (absSite && reset) {
+      writeFileSync(
+        join(absSite, SITE_MARKER_FILE),
+        JSON.stringify(
+          {
+            cms: adapter.name,
+            version: bundle?.version ?? effectiveVersion,
+            initializedAt: new Date().toISOString(),
+          },
+          null,
+          2
+        ) + '\n'
+      );
+    }
 
     const postInstallMounts = [...(detectedAutoMount?.mounts ?? []), ...mounts];
 
@@ -212,11 +430,13 @@ async function bootSite({
       effectiveVersion,
       statusLog,
       debugLog,
+      releaseSiteLock: () => siteLock?.release(),
     };
   } catch (error) {
     try {
-      php.exit();
+      php?.exit();
     } catch {}
+    siteLock?.release();
     throw error;
   }
 }
@@ -238,6 +458,7 @@ export async function startPlayground({
   port = 8790,
   host = '127.0.0.1',
   site = null,
+  reset = false,
   mountsBeforeInstall = [],
   mounts = [],
   autoMount = null,
@@ -292,6 +513,7 @@ export async function startPlayground({
       phpVersion,
       url: boundUrl,
       site,
+      reset,
       mountsBeforeInstall,
       mounts,
       autoMount,
@@ -403,12 +625,14 @@ export async function startPlayground({
         try {
           php.exit();
         } catch {}
+        booted.releaseSiteLock?.();
       },
     };
   } catch (error) {
     try {
       php.exit();
     } catch {}
+    booted.releaseSiteLock?.();
     await closeHttpServer(server);
     throw error;
   }
@@ -423,6 +647,7 @@ export async function runBlueprintHeadless({
   version = null,
   phpVersion = null,
   site = null,
+  reset = false,
   mountsBeforeInstall = [],
   mounts = [],
   autoMount = null,
@@ -445,6 +670,7 @@ export async function runBlueprintHeadless({
     version,
     phpVersion,
     site,
+    reset,
     mountsBeforeInstall,
     mounts,
     autoMount,
@@ -465,6 +691,7 @@ export async function runBlueprintHeadless({
     try {
       booted.php.exit();
     } catch {}
+    booted.releaseSiteLock?.();
   }
 }
 
@@ -478,6 +705,7 @@ export async function buildSnapshot({
   version = null,
   phpVersion = null,
   site = null,
+  reset = false,
   mountsBeforeInstall = [],
   mounts = [],
   autoMount = null,
@@ -503,6 +731,7 @@ export async function buildSnapshot({
     version,
     phpVersion,
     site,
+    reset,
     mountsBeforeInstall,
     mounts,
     autoMount,
@@ -532,6 +761,7 @@ export async function buildSnapshot({
     try {
       booted.php.exit();
     } catch {}
+    booted.releaseSiteLock?.();
   }
 }
 
@@ -542,6 +772,7 @@ export async function runCmsCli({
   adapter,
   args = [],
   site = null,
+  reset = false,
   version = null,
   phpVersion = null,
   mountsBeforeInstall = [],
@@ -565,6 +796,7 @@ export async function runCmsCli({
 
   let tempSiteDir = null;
   let hostSiteDir = site ? resolve(site) : null;
+  let releaseSiteLock = null;
 
   try {
     if (!hostSiteDir) {
@@ -580,6 +812,7 @@ export async function runCmsCli({
       version,
       phpVersion,
       site,
+      reset,
       stageDir: site ? null : hostSiteDir,
       mountsBeforeInstall,
       mounts: [],
@@ -589,6 +822,7 @@ export async function runCmsCli({
       quiet,
       log,
     });
+    releaseSiteLock = booted.releaseSiteLock;
 
     const effectivePhp = booted.effectivePhp;
     const allMounts = [
@@ -628,6 +862,7 @@ export async function runCmsCli({
       } catch {}
     }
   } finally {
+    releaseSiteLock?.();
     if (tempSiteDir) {
       rmSync(tempSiteDir, { recursive: true, force: true });
     }

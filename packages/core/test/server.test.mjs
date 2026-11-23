@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
@@ -147,6 +147,119 @@ describe('@cms-playground/core server lifecycle and error paths', () => {
       });
       assert.equal(err.exitCode, 7);
       assert.equal(err.stderr, 'bad arg');
+    } finally {
+      rmSync(workDir, { recursive: true, force: true });
+    }
+  });
+
+  it('enforces site directory locks and recovers stale locks', async () => {
+    const workDir = mkdtempSync(join(tmpdir(), 'cms-pg-site-lock-'));
+    try {
+      writeFileSync(join(workDir, 'index.php'), '<?php echo "locked-site";');
+
+      const adapter = createBaseAdapter({
+        async configure() {},
+      });
+
+      const first = await startPlayground({
+        adapter,
+        site: workDir,
+        port: 0,
+        quiet: true,
+      });
+
+      try {
+        // Lock file exists while running
+        assert.equal(existsSync(join(workDir, '.cms-playground.lock')), true);
+
+        // Second concurrent start on the same --site must fail with site_locked (CONFLICT)
+        await assert.rejects(
+          () => startPlayground({ adapter, site: workDir, port: 0, quiet: true }),
+          (err) => err.code === 'site_locked' && err.exitCode === 30
+        );
+      } finally {
+        await first.close();
+      }
+
+      // Lock file is cleaned up on close
+      assert.equal(existsSync(join(workDir, '.cms-playground.lock')), false);
+
+      // Stale lock from a dead PID is automatically recovered
+      writeFileSync(
+        join(workDir, '.cms-playground.lock'),
+        JSON.stringify({ pid: 999999, cms: 'test', startedAt: '2020-01-01T00:00:00.000Z' })
+      );
+
+      const recovered = await startPlayground({
+        adapter,
+        site: workDir,
+        port: 0,
+        quiet: true,
+      });
+      await recovered.close();
+      assert.equal(existsSync(join(workDir, '.cms-playground.lock')), false);
+    } finally {
+      rmSync(workDir, { recursive: true, force: true });
+    }
+  });
+
+  it('validates and executes --site --reset with safety guardrails', async () => {
+    const workDir = mkdtempSync(join(tmpdir(), 'cms-pg-site-reset-'));
+    try {
+      const adapter = createBaseAdapter({
+        async configure({ php, documentRoot, site }) {
+          assert.equal(site, null);
+          php.writeFile(`${documentRoot}/index.php`, '<?php echo "fresh-install";');
+        },
+      });
+
+      // --reset without --site must fail
+      await assert.rejects(
+        () => startPlayground({ adapter, reset: true, port: 0, quiet: true }),
+        (err) => err.code === 'missing_option' && /--reset requires --site/.test(err.message)
+      );
+
+      // Non-empty non-site directory must be rejected
+      const nonSiteDir = join(workDir, 'random-folder');
+      mkdirSync(nonSiteDir, { recursive: true });
+      writeFileSync(join(nonSiteDir, 'notes.txt'), 'keep me');
+      await assert.rejects(
+        () => startPlayground({ adapter, site: nonSiteDir, reset: true, port: 0, quiet: true }),
+        (err) => err.code === 'unsafe_site_reset'
+      );
+      assert.equal(existsSync(join(nonSiteDir, 'notes.txt')), true);
+
+      // Git repository directory must be rejected even if index.php exists
+      const gitDir = join(workDir, 'git-repo');
+      mkdirSync(join(gitDir, '.git'), { recursive: true });
+      writeFileSync(join(gitDir, 'index.php'), '<?php echo "repo";');
+      await assert.rejects(
+        () => startPlayground({ adapter, site: gitDir, reset: true, port: 0, quiet: true }),
+        (err) => err.code === 'unsafe_site_reset'
+      );
+
+      // Existing CMS site directory is cleanly wiped and re-initialized
+      const cmsSiteDir = join(workDir, 'my-site');
+      mkdirSync(cmsSiteDir, { recursive: true });
+      writeFileSync(join(cmsSiteDir, 'index.php'), '<?php echo "stale";');
+      writeFileSync(join(cmsSiteDir, 'stale-file.txt'), 'remove-me');
+
+      const instance = await startPlayground({
+        adapter,
+        site: cmsSiteDir,
+        reset: true,
+        port: 0,
+        quiet: true,
+      });
+
+      try {
+        assert.equal(existsSync(join(cmsSiteDir, 'stale-file.txt')), false);
+        assert.equal(existsSync(join(cmsSiteDir, '.cms-playground-site.json')), true);
+        const res = await fetch(`${instance.url}/`);
+        assert.equal(await res.text(), 'fresh-install');
+      } finally {
+        await instance.close();
+      }
     } finally {
       rmSync(workDir, { recursive: true, force: true });
     }

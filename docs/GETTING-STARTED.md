@@ -97,10 +97,22 @@ npx @cms-playground/cli start --joomla --mount-before-install=./overlay:/var/www
 
 ### Use an existing local site directory
 
-Use `--site=<dir>` to mount a persistent local directory instead of unpacking an ephemeral bundle into memory:
+Use `--site=<dir>` to mount a persistent local directory instead of unpacking an ephemeral bundle into memory. Pass `--reset` to cleanly re-initialize a site directory from a fresh bundle (protected against non-site or Git directories, and guarded by a `.cms-playground.lock` file against concurrent access):
 
 ```bash
 npx @cms-playground/cli start --joomla --site=./my-joomla-site --port=8790
+npx @cms-playground/cli start --joomla --site=./my-joomla-site --reset
+```
+
+### Manage the local bundle cache
+
+Inspect or clear cached CMS bundles and static assets under `~/.cache/cms-playground`:
+
+```bash
+npx @cms-playground/cli cache path
+npx @cms-playground/cli cache ls
+npx @cms-playground/cli cache clear --joomla
+npx @cms-playground/cli cache clear
 ```
 
 ### Run a Blueprint (server or headless)
@@ -147,6 +159,7 @@ npx @cms-playground/cli cli --joomla --site=./my-joomla-site -- cache:clean
 | `build-snapshot` | Boot a CMS, optionally run a Blueprint, and export a `.zip` snapshot |
 | `cli` | Run the CMS's native CLI (e.g. `cli/joomla.php`) in PHP-WASM |
 | `setup agent` | Install the bundled Agent Skill and configure MCP for supported coding agents |
+| `cache` | Inspect or clear the local CMS bundle cache (`path`, `ls`, `clear`) |
 | `list` | Show registered CMS adapters and supported PHP versions |
 | `map` | Output a machine-readable catalog of commands, adapters, and Blueprint steps |
 
@@ -158,6 +171,7 @@ npx @cms-playground/cli cli --joomla --site=./my-joomla-site -- cache:clean
 | `--port=<number>` | `8790` | Local HTTP port (`0` selects a random free port) |
 | `--host=<address>` | `127.0.0.1` | Local bind address |
 | `--site=<dir>` | *(ephemeral)* | Mount an existing local site directory |
+| `--reset` | `false` | Re-initialize a persistent `--site` directory from a fresh bundle |
 | `--blueprint=<src>` | *(none)* | Blueprint JSON file path or HTTP(S) URL |
 | `--output=<path>` | *(none)* | Output `.zip` path for `build-snapshot` |
 | `--mount=<host:vfs>` | *(none)* | Mount a host folder into VFS after configure (repeatable) |

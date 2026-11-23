@@ -63,7 +63,7 @@ describe('Documentation verification', () => {
   });
 
   it('all CLI example commands in README.md and docs/*.md parse cleanly with parseCliArgs()', () => {
-    const validCommands = new Set(['start', 'run-blueprint', 'build-snapshot', 'cli', 'list', 'setup', 'map']);
+    const validCommands = new Set(['start', 'run-blueprint', 'build-snapshot', 'cli', 'list', 'setup', 'cache', 'map']);
     let checked = 0;
 
     for (const file of DOC_FILES) {
@@ -92,7 +92,7 @@ describe('Documentation verification', () => {
             `Unknown documented command "${parsed.command}" in ${file}: "${line}"`
           );
 
-          if (parsed.command !== 'list' && parsed.command !== 'setup' && parsed.command !== 'map') {
+          if (parsed.command !== 'list' && parsed.command !== 'setup' && parsed.command !== 'cache' && parsed.command !== 'map') {
             assert.ok(
               parsed.cms,
               `Documented "${parsed.command}" command missing CMS flag in ${file}: "${line}"`
@@ -161,6 +161,7 @@ describe('Documentation verification', () => {
       'build-snapshot',
       'cli',
       'setup',
+      'cache',
       'list',
       'map',
       '--joomla',
@@ -171,6 +172,7 @@ describe('Documentation verification', () => {
       '--php',
       '--port',
       '--site',
+      '--reset',
       '--blueprint',
       '--output',
       '--mount',

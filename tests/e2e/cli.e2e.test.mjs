@@ -777,6 +777,71 @@ describe('CLI E2E: --json receipts, agent mode, --cwd, and classified exit codes
     const lines = pathsRes.stdout.trim().split('\n');
     assert.ok(lines.includes('cms-playground start --joomla'));
     assert.ok(lines.includes('cms-playground start --wp'));
+    assert.ok(lines.includes('cms-playground cache ls'));
     assert.ok(lines.includes('cms-playground map --paths'));
+  });
+
+  it('supports cms-playground cache path, ls, clear and rejects concurrent --site locks', async () => {
+    const tmp = createTempDir('e2e-cache-and-lock-');
+    try {
+      const cacheRoot = join(tmp.dir, 'cache');
+      const siteDir = join(tmp.dir, 'site');
+      mkdirSync(join(cacheRoot, 'joomla'), { recursive: true });
+      mkdirSync(join(cacheRoot, 'wp'), { recursive: true });
+      mkdirSync(siteDir, { recursive: true });
+      writeFileSync(join(cacheRoot, 'joomla', 'bundle.zip'), '12345678');
+      writeFileSync(join(cacheRoot, 'wp', 'bundle.zip'), '1234');
+      createMockWordPressSite(siteDir);
+
+      const pathRes = await runCliProcess(['cache', 'path', '--json'], {
+        env: { CMS_PLAYGROUND_CACHE_DIR: cacheRoot },
+      });
+      assert.equal(pathRes.exitCode, 0, pathRes.stderr);
+      assert.equal(JSON.parse(pathRes.stdout.trim()).data.path, cacheRoot);
+
+      const lsRes = await runCliProcess(['cache', 'ls', '--json'], {
+        env: { CMS_PLAYGROUND_CACHE_DIR: cacheRoot },
+      });
+      assert.equal(lsRes.exitCode, 0, lsRes.stderr);
+      assert.equal(JSON.parse(lsRes.stdout.trim()).data.totalFiles, 2);
+
+      const clearJoomla = await runCliProcess(['cache', 'clear', '--joomla', '--json'], {
+        env: { CMS_PLAYGROUND_CACHE_DIR: cacheRoot },
+      });
+      assert.equal(clearJoomla.exitCode, 0, clearJoomla.stderr);
+      assert.equal(JSON.parse(clearJoomla.stdout.trim()).data.cleared, true);
+      assert.equal(existsSync(join(cacheRoot, 'joomla')), false);
+      assert.equal(existsSync(join(cacheRoot, 'wp', 'bundle.zip')), true);
+
+      // Concurrent --site lock contention returns exit code 30 (CONFLICT)
+      const port = await getFreePort();
+      const server = await startCliServer(['--wp', `--site=${siteDir}`, `--port=${port}`]);
+      try {
+        const lockedRes = await runCliProcess([
+          'run-blueprint',
+          '--wp',
+          `--site=${siteDir}`,
+          `--blueprint=${join(tmp.dir, 'bp.json')}`,
+          '--json',
+        ]);
+        // Missing blueprint fails before lock; create a valid blueprint to hit the site lock
+        writeFileSync(join(tmp.dir, 'bp.json'), JSON.stringify({ steps: [] }));
+        const conflictRes = await runCliProcess([
+          'run-blueprint',
+          '--wp',
+          `--site=${siteDir}`,
+          `--blueprint=${join(tmp.dir, 'bp.json')}`,
+          '--json',
+        ]);
+        assert.equal(conflictRes.exitCode, 30, conflictRes.stderr);
+        const conflictPayload = JSON.parse(conflictRes.stderr.trim());
+        assert.equal(conflictPayload.error.code, 'site_locked');
+        assert.equal(lockedRes.exitCode, 20);
+      } finally {
+        await server.stop('SIGTERM');
+      }
+    } finally {
+      tmp.cleanup();
+    }
   });
 });
