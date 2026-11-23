@@ -32,11 +32,21 @@ import { kirbyAdapter } from '@cms-playground/kirby';
 import { typo3Adapter } from '@cms-playground/typo3';
 import { wordpressAdapter } from '@cms-playground/wordpress';
 import { initAgentsFile } from './agents-init.js';
+import { extractPhpErrors, fetchPlaygroundPage } from './fetch.js';
 import { buildCliMap, buildCliPaths } from './map.js';
 import { MCP_TOOLS, createMcpServer, runMcpServer } from './mcp.js';
 import { setupAgent } from './setup-agent.js';
 
-export { MCP_TOOLS, buildCliMap, buildCliPaths, createMcpServer, initAgentsFile, runMcpServer };
+export {
+  MCP_TOOLS,
+  buildCliMap,
+  buildCliPaths,
+  createMcpServer,
+  extractPhpErrors,
+  fetchPlaygroundPage,
+  initAgentsFile,
+  runMcpServer,
+};
 
 // Register built-in CMS adapters.
 registerAdapter(joomlaAdapter);
@@ -59,6 +69,7 @@ Usage:
   cms-playground run-blueprint  --joomla --blueprint=<file|url> [options]
   cms-playground build-snapshot --joomla --output=./snapshot.zip [options]
   cms-playground cli            --joomla [options] -- <cms-cli-args...>
+  cms-playground fetch          [path] --joomla [options]
   cms-playground setup agent    [--agent <id>] [--project] [--yes] [--skip-mcp] [--dry-run]
   cms-playground agents init    [--cwd=<path>] [--dry-run] [--json]
   cms-playground cache          <path|ls|clear> [--joomla|--wp|...] [--json]
@@ -71,6 +82,7 @@ Commands:
   run-blueprint   Run a Blueprint headlessly without starting an HTTP server
   build-snapshot  Boot a CMS, optionally run a Blueprint, and export a .zip snapshot
   cli             Run the CMS's native CLI (e.g. cli/joomla.php) in PHP-WASM
+  fetch           One-shot HTTP request and verification against a booted CMS route
   setup agent     Install the bundled Agent Skill and configure MCP for coding agents
   agents init     Scaffold or update the @cms-playground block in AGENTS.md
   cache           Inspect or clear the local CMS bundle cache (path, ls, clear)
@@ -113,6 +125,13 @@ Setup Agent Options (cms-playground setup agent):
   --skip-mcp                     Install the bundled skill without writing MCP config
   --dry-run                      Preview planned file and config changes without writing
   --force                        Overwrite locally modified skill files
+
+Fetch Options (cms-playground fetch [path]):
+  --status                       Report HTTP status line
+  --headers                      Include HTTP response headers
+  --output=<file>                Write response body to a file
+  --verify-status=<code>         Exit non-zero if HTTP status does not equal <code>
+  --fail-on-php-error            Exit non-zero if PHP warnings, notices, or fatal errors are detected
 `.trim();
 
 /**
@@ -218,6 +237,10 @@ export function parseCliArgs(argv, { env = process.env, cwd = process.cwd() } = 
     skipMcp: false,
     dryRun: false,
     force: false,
+    status: false,
+    headers: false,
+    verifyStatus: null,
+    failOnPhpError: false,
     verbosity: 'normal',
     quiet: false,
     help: false,
@@ -272,6 +295,21 @@ export function parseCliArgs(argv, { env = process.env, cwd = process.cwd() } = 
 
     if (arg === '--force') {
       options.force = true;
+      continue;
+    }
+
+    if (arg === '--status') {
+      options.status = true;
+      continue;
+    }
+
+    if (arg === '--headers') {
+      options.headers = true;
+      continue;
+    }
+
+    if (arg === '--fail-on-php-error') {
+      options.failOnPhpError = true;
       continue;
     }
 
@@ -375,6 +413,18 @@ export function parseCliArgs(argv, { env = process.env, cwd = process.cwd() } = 
         case 'agent':
           options.agents.push(nextValue());
           break;
+        case 'verify-status': {
+          const code = Number(nextValue());
+          if (!Number.isInteger(code) || code < 100 || code > 599) {
+            throw new PlaygroundError(`Invalid HTTP status code: ${code}`, {
+              code: 'invalid_option',
+              exitCode: EXIT_CODES.VALIDATION,
+              suggestions: ['Pass an HTTP status code between 100 and 599 (e.g. --verify-status=200).'],
+            });
+          }
+          options.verifyStatus = code;
+          break;
+        }
         case 'verbosity': {
           const level = nextValue().toLowerCase();
           if (!VERBOSITY_LEVELS.includes(level)) {
@@ -405,7 +455,7 @@ export function parseCliArgs(argv, { env = process.env, cwd = process.cwd() } = 
 
     if (!command) {
       command = arg;
-    } else if ((command === 'setup' || command === 'agents' || command === 'cache') && !subcommand) {
+    } else if ((command === 'setup' || command === 'agents' || command === 'cache' || command === 'fetch') && !subcommand) {
       subcommand = arg;
     } else {
       throw new PlaygroundError(`Unexpected argument: ${arg}`, {
@@ -491,7 +541,7 @@ export async function run(argv = process.argv.slice(2), { env = process.env, cwd
     if (options.json) {
       emitJson({
         help: HELP_TEXT,
-        commands: ['start', 'run-blueprint', 'build-snapshot', 'cli', 'setup agent', 'agents init', 'cache', 'mcp', 'list', 'map'],
+        commands: ['start', 'run-blueprint', 'build-snapshot', 'cli', 'fetch', 'setup agent', 'agents init', 'cache', 'mcp', 'list', 'map'],
       });
     } else {
       console.log(HELP_TEXT);
@@ -853,6 +903,47 @@ export async function run(argv = process.argv.slice(2), { env = process.env, cwd
     }
 
     return exitCode;
+  }
+
+  if (command === 'fetch') {
+    const { result } = await fetchPlaygroundPage({
+      adapter,
+      path: subcommand ?? '/',
+      version: cmsVersion,
+      phpVersion: options.php,
+      site: resolvedSite,
+      mountsBeforeInstall: options.mountsBeforeInstall,
+      mounts: options.mounts,
+      autoMount: resolvedAutoMount,
+      blueprintSource: resolvedBlueprint,
+      verbosity: options.verbosity,
+      quiet: effectiveQuiet,
+      showStatus: options.status,
+      showHeaders: options.headers,
+      outputPath: resolvedOutput,
+      verifyStatus: options.verifyStatus,
+      failOnPhpError: options.failOnPhpError,
+      log: effectiveQuiet ? () => {} : (msg) => console.error(msg),
+    });
+
+    if (options.json) {
+      emitJson(result);
+    } else if (!options.quiet) {
+      console.log(`HTTP ${result.status}${result.statusText ? ` ${result.statusText}` : ''}`);
+      if (options.headers && result.headers) {
+        for (const [name, value] of Object.entries(result.headers)) {
+          console.log(`${name}: ${value}`);
+        }
+      }
+      if (result.output) {
+        console.log(`Fetched ${result.path} -> ${result.output} (${result.bytes} bytes).`);
+      }
+      if (result.phpErrors.length > 0) {
+        console.error(`PHP errors detected (${result.phpErrors.length}): ${result.phpErrors[0]}`);
+      }
+    }
+
+    return EXIT_CODES.OK;
   }
 
   throw new PlaygroundError(

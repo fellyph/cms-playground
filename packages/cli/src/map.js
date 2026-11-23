@@ -84,6 +84,21 @@ export function buildCliMap() {
       ],
     },
     {
+      id: 'fetch',
+      usage: 'cms-playground fetch [path] --<cms>[=<version>] [options]',
+      description: 'Execute a one-shot HTTP request and verification against a booted CMS route',
+      flags: [
+        ...cmsFlags,
+        ...SHARED_CMS_RUNTIME_FLAGS,
+        { name: '--status', value: null, description: 'Report HTTP status' },
+        { name: '--headers', value: null, description: 'Include HTTP response headers' },
+        { name: '--output', value: '<file>', description: 'Write response body to a file' },
+        { name: '--verify-status', value: '<code>', description: 'Exit non-zero if HTTP status does not match' },
+        { name: '--fail-on-php-error', value: null, description: 'Exit non-zero if PHP errors are detected' },
+        ...GLOBAL_FLAGS,
+      ],
+    },
+    {
       id: 'setup agent',
       usage: 'cms-playground setup agent [--agent <id>] [--project] [--yes] [--skip-mcp] [--dry-run] [--force]',
       description: 'Install the bundled Agent Skill and configure MCP for coding agents',
@@ -202,6 +217,10 @@ export function buildCliPaths(map = buildCliMap()) {
     if (adapter.cliEntrypoint) {
       paths.push(`cms-playground cli --${adapter.name} -- <args...>`);
     }
+  }
+
+  for (const adapter of map.adapters) {
+    paths.push(`cms-playground fetch / --${adapter.name}`);
   }
 
   paths.push('cms-playground setup agent');

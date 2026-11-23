@@ -158,6 +158,7 @@ npx @cms-playground/cli cli --joomla --site=./my-joomla-site -- cache:clean
 | `run-blueprint` | Run a Blueprint headlessly without starting an HTTP server |
 | `build-snapshot` | Boot a CMS, optionally run a Blueprint, and export a `.zip` snapshot |
 | `cli` | Run the CMS's native CLI (e.g. `cli/joomla.php`) in PHP-WASM |
+| `fetch` | Execute a one-shot HTTP request and verification against a booted CMS route |
 | `setup agent` | Install the bundled Agent Skill and configure MCP for supported coding agents |
 | `agents init` | Scaffold or idempotently update the `@cms-playground` guidance block in `AGENTS.md` |
 | `cache` | Inspect or clear the local CMS bundle cache (`path`, `ls`, `clear`) |
@@ -207,6 +208,7 @@ npx @cms-playground/cli map --json
 npx @cms-playground/cli map --paths
 npx @cms-playground/cli start --joomla --port=0 --json
 npx @cms-playground/cli run-blueprint --wp --cwd=./my-site --site=. --blueprint=./blueprint.json --json
+npx @cms-playground/cli fetch / --joomla --auto-mount --verify-status=200 --fail-on-php-error --json
 ```
 
 | Exit Code | Meaning |
