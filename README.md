@@ -31,9 +31,15 @@ npx @cms-playground/cli start --joomla --blueprint=./blueprint.json
 npx @cms-playground/cli run-blueprint --joomla --blueprint=./blueprint.json
 npx @cms-playground/cli build-snapshot --joomla --blueprint=./blueprint.json --output=./snapshot.zip
 
-# Persist a local site directory, bind a custom host, or control log verbosity
+# Persist a local site directory, reset it cleanly, bind a custom host, or control log verbosity
 npx @cms-playground/cli start --joomla --site=./my-site --host=127.0.0.1 --verbosity=debug
+npx @cms-playground/cli start --joomla --site=./my-site --reset
 npx @cms-playground/cli run-blueprint --wp --blueprint=./blueprint.json --quiet
+
+# Inspect or clear the local CMS bundle cache
+npx @cms-playground/cli cache path
+npx @cms-playground/cli cache ls
+npx @cms-playground/cli cache clear --joomla
 
 # Run Joomla's own CLI (cli/joomla.php) without local PHP
 npx @cms-playground/cli cli --joomla -- user:list

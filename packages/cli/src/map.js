@@ -13,6 +13,7 @@ const GLOBAL_FLAGS = Object.freeze([
 const SHARED_CMS_RUNTIME_FLAGS = Object.freeze([
   { name: '--php', value: '<version>', description: 'PHP version (e.g. 8.3, 8.4, 8.5)' },
   { name: '--site', value: '<dir>', description: 'Mount an existing local site directory instead of a fresh bundle' },
+  { name: '--reset', value: null, description: 'Re-initialize a persistent --site directory from a fresh bundle' },
   { name: '--blueprint', value: '<file|url>', description: 'Blueprint JSON file path or URL to execute after boot' },
   { name: '--mount', value: '<src:vfs>', repeatable: true, description: 'Mount a host folder into VFS after configure' },
   { name: '--mount-before-install', value: '<src:vfs>', repeatable: true, description: 'Mount a host folder into VFS before configure' },
@@ -104,6 +105,12 @@ export function buildCliMap() {
         { name: '--dry-run', value: null, description: 'Preview planned AGENTS.md changes without writing' },
         ...GLOBAL_FLAGS,
       ],
+    },
+    {
+      id: 'cache',
+      usage: 'cms-playground cache <path|ls|clear> [--<cms>] [--json]',
+      description: 'Inspect or clear the local CMS bundle cache (path, ls, clear)',
+      flags: [...cmsFlags, ...GLOBAL_FLAGS],
     },
     {
       id: 'mcp',
@@ -199,6 +206,9 @@ export function buildCliPaths(map = buildCliMap()) {
 
   paths.push('cms-playground setup agent');
   paths.push('cms-playground agents init');
+  paths.push('cms-playground cache path');
+  paths.push('cms-playground cache ls');
+  paths.push('cms-playground cache clear');
   paths.push('cms-playground mcp');
   paths.push('cms-playground list');
   paths.push('cms-playground map');

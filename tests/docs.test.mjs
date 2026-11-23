@@ -63,7 +63,7 @@ describe('Documentation verification', () => {
   });
 
   it('all CLI example commands in README.md and docs/*.md parse cleanly with parseCliArgs()', () => {
-    const validCommands = new Set(['start', 'run-blueprint', 'build-snapshot', 'cli', 'list', 'setup', 'agents', 'map', 'mcp']);
+    const validCommands = new Set(['start', 'run-blueprint', 'build-snapshot', 'cli', 'list', 'setup', 'agents', 'cache', 'map', 'mcp']);
     let checked = 0;
 
     for (const file of DOC_FILES) {
@@ -96,6 +96,7 @@ describe('Documentation verification', () => {
             parsed.command !== 'list' &&
             parsed.command !== 'setup' &&
             parsed.command !== 'agents' &&
+            parsed.command !== 'cache' &&
             parsed.command !== 'map' &&
             parsed.command !== 'mcp'
           ) {
@@ -167,6 +168,7 @@ describe('Documentation verification', () => {
       'build-snapshot',
       'cli',
       'setup',
+      'cache',
       'list',
       'map',
       '--joomla',
@@ -177,6 +179,7 @@ describe('Documentation verification', () => {
       '--php',
       '--port',
       '--site',
+      '--reset',
       '--blueprint',
       '--output',
       '--mount',
