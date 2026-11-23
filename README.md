@@ -54,6 +54,7 @@ npx @cms-playground/cli list
 ## Documentation
 
 - [Getting Started](docs/GETTING-STARTED.md) — installation, commands, flags, caching, and environment variables
+- [Hands-On Tutorial](docs/TUTORIAL.md) — step-by-step walkthrough of testing all 5 CMSs, Blueprints, mounts, native CLI, and snapshots
 - [Blueprints](docs/BLUEPRINTS.md) — core, Joomla, and WordPress Blueprint steps with JSON examples
 - [Writing a CMS Adapter](docs/ADAPTERS.md) — adapter contract and how to add a new CMS
 - [Roadmap](ROADMAP.md) — phased plan modeled on `@wp-playground/cli`
