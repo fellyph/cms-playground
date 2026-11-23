@@ -88,12 +88,13 @@ Use Node.js 24.18+ and npm 11.16+. From the repository root:
 ```sh
 npm ci
 npm test
+npm run release:check
 npm run release:preview
 npm run release:publish -- --dry-run
 npm login --registry=https://registry.npmjs.org/
 npm run release:publish
 ```
 
-The preview lists every file in each tarball. The publish command releases core, then the adapters, then the CLI to the public npm registry. If publishing stops midway, check each version with `npm view <package>@<version> version --registry=https://registry.npmjs.org/`. Resume with `npm publish -w <package> --access public --registry=https://registry.npmjs.org/` for each remaining workspace in the same order.
+`npm run release:check` validates that workspace versions and internal dependency pins match and that no test or temporary files leak into any tarball. The publish command releases core, then the adapters, then the CLI to the public npm registry. If publishing stops midway, check each version with `npm view <package>@<version> version --registry=https://registry.npmjs.org/`. Resume with `npm publish -w <package> --access public --registry=https://registry.npmjs.org/` for each remaining workspace in the same order.
 
-For a subsequent patch release, start from the last released revision and run `npm run release:patch` once. This bumps the workspaces, aligns internal dependency pins, and refreshes the lockfile. Review and commit those changes, then repeat the test, preview, and publish steps. From an empty directory, verify the published CLI with `npx @cms-playground/cli list` and `npx @cms-playground/cli start --wp`.
+For a subsequent release, start from the last released revision and run `npm run release:patch`, `npm run release:minor`, or `npm run release:major` once. This bumps the workspaces, aligns internal dependency pins, and refreshes the lockfile. Review and commit those changes, then push a matching `vX.Y.Z` tag to trigger `.github/workflows/release.yml` (which verifies tests and tarballs, publishes with `--provenance`, and creates a GitHub Release), or run the workflow manually with `dry_run` enabled to test the release pipeline first. From an empty directory, verify the published CLI with `npx @cms-playground/cli list` and `npx @cms-playground/cli start --wp`.

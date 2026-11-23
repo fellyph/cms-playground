@@ -5,9 +5,10 @@ import { readFileSync } from 'node:fs';
 const cli = JSON.parse(readFileSync(new URL('../packages/cli/package.json', import.meta.url)));
 const core = '@cms-playground/core';
 const adapters = Object.keys(cli.dependencies).filter(name => name.startsWith('@cms-playground/') && name !== core);
+const allowedFlags = new Set(['--dry-run', '--provenance']);
 const args = process.argv.slice(2);
-if (args.length && !(args.length === 1 && args[0] === '--dry-run')) {
-  throw new Error('Usage: npm run release:publish [-- --dry-run]');
+if (args.some((arg) => !allowedFlags.has(arg))) {
+  throw new Error('Usage: npm run release:publish [-- --dry-run] [-- --provenance]');
 }
 
 for (const name of [core, ...adapters, cli.name]) {
