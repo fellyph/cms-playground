@@ -888,3 +888,41 @@ describe('CLI E2E: local stdio MCP server (cms-playground mcp)', () => {
     }
   });
 });
+
+describe('CLI E2E: agents init', () => {
+  it('scaffolds and updates AGENTS.md idempotently, supports --dry-run/--json, and exits 2 on malformed markers', async () => {
+    const tmp = createTempDir('e2e-agents-init-');
+    try {
+      writeFileSync(
+        join(tmp.dir, 'demo-plugin.php'),
+        '<?php\n/*\nPlugin Name: E2E Demo\n*/\n',
+        'utf8'
+      );
+
+      const dryRes = await runCliProcess(['agents', 'init', `--cwd=${tmp.dir}`, '--dry-run', '--json']);
+      assert.equal(dryRes.exitCode, 0, dryRes.stderr);
+      const dryPayload = JSON.parse(dryRes.stdout.trim());
+      assert.equal(dryPayload.data.action, 'create');
+      assert.equal(dryPayload.data.dryRun, true);
+      assert.equal(dryPayload.data.detected.cms, 'wp');
+      assert.equal(existsSync(join(tmp.dir, 'AGENTS.md')), false);
+
+      const createRes = await runCliProcess(['agents', 'init', `--cwd=${tmp.dir}`, '--json']);
+      assert.equal(createRes.exitCode, 0, createRes.stderr);
+      assert.equal(JSON.parse(createRes.stdout.trim()).data.action, 'create');
+      assert.equal(existsSync(join(tmp.dir, 'AGENTS.md')), true);
+
+      const secondRes = await runCliProcess(['agents', 'init', `--cwd=${tmp.dir}`, '--json']);
+      assert.equal(secondRes.exitCode, 0, secondRes.stderr);
+      assert.equal(JSON.parse(secondRes.stdout.trim()).data.action, 'unchanged');
+
+      // Malformed markers must fail with exit code 2 and structured JSON error.
+      writeFileSync(join(tmp.dir, 'AGENTS.md'), '<!-- CMS-PLAYGROUND START -->\nbroken\n', 'utf8');
+      const badRes = await runCliProcess(['agents', 'init', `--cwd=${tmp.dir}`, '--json']);
+      assert.equal(badRes.exitCode, 2);
+      assert.equal(JSON.parse(badRes.stderr.trim()).error.code, 'invalid_agents_markers');
+    } finally {
+      tmp.cleanup();
+    }
+  });
+});

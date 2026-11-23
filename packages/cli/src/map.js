@@ -97,6 +97,15 @@ export function buildCliMap() {
       ],
     },
     {
+      id: 'agents init',
+      usage: 'cms-playground agents init [--cwd=<path>] [--dry-run] [--json]',
+      description: 'Scaffold or idempotently update the @cms-playground guidance block in AGENTS.md',
+      flags: [
+        { name: '--dry-run', value: null, description: 'Preview planned AGENTS.md changes without writing' },
+        ...GLOBAL_FLAGS,
+      ],
+    },
+    {
       id: 'mcp',
       usage: 'cms-playground mcp [--cwd=<path>]',
       description: 'Start a local stdio MCP server for coding agents',
@@ -189,6 +198,7 @@ export function buildCliPaths(map = buildCliMap()) {
   }
 
   paths.push('cms-playground setup agent');
+  paths.push('cms-playground agents init');
   paths.push('cms-playground mcp');
   paths.push('cms-playground list');
   paths.push('cms-playground map');
