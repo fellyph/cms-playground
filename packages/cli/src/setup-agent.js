@@ -1,16 +1,19 @@
 // Configures coding agent clients with the bundled @cms-playground Skill and MCP server entry.
 
+import { randomBytes } from 'node:crypto';
 import {
+  chmodSync,
   existsSync,
   lstatSync,
   mkdirSync,
   readdirSync,
   readFileSync,
   renameSync,
+  unlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { homedir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
 import { EXIT_CODES, PlaygroundError } from '@cms-playground/core';
@@ -177,14 +180,15 @@ export function resolveAgentTargets(requestedAgents, homeDir) {
  * Strips JSONC comments (// and /* *\/) and trailing commas outside string literals.
  */
 export function parseJsonc(rawText, filePath) {
+  const input = rawText.replace(/^\uFEFF/, '');
   let out = '';
   let inString = false;
   let escaped = false;
   let i = 0;
 
-  while (i < rawText.length) {
-    const ch = rawText[i];
-    const next = rawText[i + 1];
+  while (i < input.length) {
+    const ch = input[i];
+    const next = input[i + 1];
 
     if (inString) {
       out += ch;
@@ -208,7 +212,7 @@ export function parseJsonc(rawText, filePath) {
 
     if (ch === '/' && next === '/') {
       i += 2;
-      while (i < rawText.length && rawText[i] !== '\n') {
+      while (i < input.length && input[i] !== '\n') {
         i++;
       }
       continue;
@@ -216,7 +220,7 @@ export function parseJsonc(rawText, filePath) {
 
     if (ch === '/' && next === '*') {
       i += 2;
-      while (i < rawText.length && !(rawText[i] === '*' && rawText[i + 1] === '/')) {
+      while (i < input.length && !(input[i] === '*' && input[i + 1] === '/')) {
         i++;
       }
       i += 2;
@@ -227,8 +231,45 @@ export function parseJsonc(rawText, filePath) {
     i++;
   }
 
-  // Strip trailing commas before closing } or ].
-  const withoutTrailingCommas = out.replace(/,\s*([}\]])/g, '$1').trim();
+  // Strip trailing commas before closing } or ] outside string literals.
+  let withoutTrailingCommas = '';
+  inString = false;
+  escaped = false;
+  for (let j = 0; j < out.length; j++) {
+    const ch = out[j];
+
+    if (inString) {
+      withoutTrailingCommas += ch;
+      if (escaped) {
+        escaped = false;
+      } else if (ch === '\\') {
+        escaped = true;
+      } else if (ch === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (ch === '"') {
+      inString = true;
+      withoutTrailingCommas += ch;
+      continue;
+    }
+
+    if (ch === ',') {
+      let k = j + 1;
+      while (k < out.length && (out[k] === ' ' || out[k] === '\t' || out[k] === '\r' || out[k] === '\n')) {
+        k++;
+      }
+      if (out[k] === '}' || out[k] === ']') {
+        continue;
+      }
+    }
+
+    withoutTrailingCommas += ch;
+  }
+
+  withoutTrailingCommas = withoutTrailingCommas.trim();
 
   if (!withoutTrailingCommas) {
     return {};
@@ -282,7 +323,8 @@ function assertNotSymlink(targetPath, expectedType, label) {
   }
 
   if (stat.isSymbolicLink()) {
-    throw new Error(`Refusing symbolic link or non-file ${label}: ${targetPath}`);
+    const kind = expectedType === 'dir' ? 'non-directory' : 'non-file';
+    throw new Error(`Refusing symbolic link or ${kind} ${label}: ${targetPath}`);
   }
 
   if (expectedType === 'file' && !stat.isFile()) {
@@ -297,14 +339,74 @@ function assertNotSymlink(targetPath, expectedType, label) {
 }
 
 /**
- * Atomically writes UTF-8 text to a file (creating parent directories if needed).
+ * Verifies that no existing ancestor directory between baseDir and targetPath is a symlink.
  */
-function writeFileAtomic(filePath, content) {
+function assertNoSymlinkAncestors(targetPath, baseDir, label) {
+  const absBase = resolve(baseDir);
+  const absParent = resolve(dirname(targetPath));
+  const rel = relative(absBase, absParent);
+
+  if (!rel || rel === '.') {
+    return;
+  }
+
+  if (rel.startsWith('..') || isAbsolute(rel)) {
+    assertNotSymlink(absParent, 'dir', `${label} parent directory`);
+    return;
+  }
+
+  let current = absBase;
+  for (const segment of rel.split(sep)) {
+    if (!segment) {
+      continue;
+    }
+    current = join(current, segment);
+    const stat = assertNotSymlink(current, 'dir', `${label} parent directory`);
+    if (!stat) {
+      break;
+    }
+  }
+}
+
+/**
+ * Picks the base root (projectDir or homeDir) containing targetPath for ancestor symlink checks.
+ */
+function pickBaseDir(targetPath, homeDir, projectDir) {
+  const absTarget = resolve(targetPath);
+  const absProject = resolve(projectDir);
+  const relProject = relative(absProject, absTarget);
+  if (relProject && !relProject.startsWith('..') && !isAbsolute(relProject)) {
+    return absProject;
+  }
+  return resolve(homeDir);
+}
+
+/**
+ * Atomically writes UTF-8 text to a file (creating parent directories if needed)
+ * while preserving existing file permissions and cleaning up temp files on error.
+ */
+function writeFileAtomic(filePath, content, existingMode) {
   const dir = dirname(filePath);
   mkdirSync(dir, { recursive: true });
-  const tmpPath = join(dir, `.${process.pid}.${Date.now()}.tmp`);
-  writeFileSync(tmpPath, content, 'utf8');
-  renameSync(tmpPath, filePath);
+  const tmpPath = join(dir, `.${process.pid}.${randomBytes(4).toString('hex')}.tmp`);
+  try {
+    writeFileSync(
+      tmpPath,
+      content,
+      existingMode !== undefined ? { encoding: 'utf8', mode: existingMode } : 'utf8'
+    );
+    if (existingMode !== undefined && process.platform !== 'win32') {
+      chmodSync(tmpPath, existingMode);
+    }
+    renameSync(tmpPath, filePath);
+  } catch (err) {
+    try {
+      unlinkSync(tmpPath);
+    } catch {
+      // Ignore cleanup errors.
+    }
+    throw err;
+  }
 }
 
 /**
@@ -386,10 +488,13 @@ export async function setupAgent(options = {}) {
 
   // Plan & apply skill file installs.
   for (const plan of skillPlans) {
+    const baseDir = pickBaseDir(plan.destDir, homeDir, projectDir);
+    assertNoSymlinkAncestors(plan.destDir, baseDir, 'skill directory');
     assertNotSymlink(plan.destDir, 'dir', 'skill directory');
 
     for (const file of bundledFiles) {
       const destPath = join(plan.destDir, file.relPath);
+      assertNoSymlinkAncestors(destPath, baseDir, 'skill file');
       const stat = assertNotSymlink(destPath, 'file', 'skill file');
 
       if (!stat) {
@@ -423,7 +528,7 @@ export async function setupAgent(options = {}) {
       }
 
       if (!dryRun) {
-        writeFileAtomic(destPath, file.content);
+        writeFileAtomic(destPath, file.content, stat.mode & 0o777);
       }
       actions.push({ kind: 'skill', agent: plan.agent, path: destPath, action: 'update' });
     }
@@ -441,6 +546,8 @@ export async function setupAgent(options = {}) {
       }
       seenMcpPaths.add(mcp.path);
 
+      const mcpBaseDir = pickBaseDir(mcp.path, homeDir, projectDir);
+      assertNoSymlinkAncestors(mcp.path, mcpBaseDir, 'MCP config');
       const stat = assertNotSymlink(mcp.path, 'file', 'MCP config');
       let config = {};
 
@@ -476,7 +583,11 @@ export async function setupAgent(options = {}) {
 
       const actionType = stat ? 'update' : 'create';
       if (!dryRun) {
-        writeFileAtomic(mcp.path, `${JSON.stringify(nextConfig, null, 2)}\n`);
+        writeFileAtomic(
+          mcp.path,
+          `${JSON.stringify(nextConfig, null, 2)}\n`,
+          stat ? stat.mode & 0o777 : undefined
+        );
       }
       actions.push({ kind: 'mcp', agent: target.id, path: mcp.path, action: actionType });
     }
