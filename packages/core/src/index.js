@@ -1,6 +1,7 @@
 export { getAdapter, listAdapters, registerAdapter, unregisterAdapter } from './adapter.js';
 export { CORE_STEPS, CORE_STEP_SCHEMAS, loadBlueprint, resolveVfsPath, runBlueprint } from './blueprints.js';
 export {
+  DEFAULT_FETCH_TIMEOUT_MS,
   clearCache,
   downloadToCache,
   fetchCachedBytes,
@@ -23,6 +24,7 @@ export {
   moveDirectoryContents,
   packZip,
   parseMountSpec,
+  phpSingleQuote,
   randomPassword,
   runPhpCode,
   unpackZip,

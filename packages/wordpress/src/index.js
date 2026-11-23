@@ -4,7 +4,7 @@
 import { randomBytes } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
-import { DOCUMENT_ROOT, fetchCachedBytes, runPhpCode, unpackZip } from '@cms-playground/core';
+import { DOCUMENT_ROOT, fetchCachedBytes, phpSingleQuote, runPhpCode, unpackZip } from '@cms-playground/core';
 
 const WP_SQLITE_PLUGIN_URL = 'https://downloads.wordpress.org/plugin/sqlite-database-integration.latest-stable.zip';
 const WP_VERSION_RE = /^(latest|default|[0-9]+(\.[0-9]+)*(-[a-zA-Z0-9.]+)?)$/;
@@ -41,7 +41,7 @@ const blueprintSteps = {
       `
       $consts = json_decode(file_get_contents('/tmp/wp-consts.json'), true);
       unlink('/tmp/wp-consts.json');
-      $file = ${JSON.stringify(context.documentRoot)} . '/wp-config.php';
+      $file = ${phpSingleQuote(context.documentRoot)} . '/wp-config.php';
       $content = file_get_contents($file);
       $snippet = '';
       foreach ($consts as $name => $value) {
@@ -67,7 +67,7 @@ const blueprintSteps = {
       `
       $data = json_decode(file_get_contents('/tmp/wp-option.json'), true);
       unlink('/tmp/wp-option.json');
-      require_once ${JSON.stringify(context.documentRoot)} . '/wp-load.php';
+      require_once ${phpSingleQuote(context.documentRoot)} . '/wp-load.php';
       update_option($data['option'], $data['value']);
       `
     );
@@ -77,9 +77,9 @@ const blueprintSteps = {
     await runPhpCode(
       context.php,
       `
-      require_once ${JSON.stringify(context.documentRoot)} . '/wp-load.php';
+      require_once ${phpSingleQuote(context.documentRoot)} . '/wp-load.php';
       require_once ABSPATH . 'wp-admin/includes/plugin.php';
-      $result = activate_plugin(${JSON.stringify(pluginPath)});
+      $result = activate_plugin(${phpSingleQuote(pluginPath)});
       if (is_wp_error($result)) {
           throw new RuntimeException($result->get_error_message());
       }
@@ -145,7 +145,7 @@ export const wordpressAdapter = {
         php,
         `
         $src = '/tmp/wp-extract/wordpress';
-        $dst = ${JSON.stringify(documentRoot)};
+        $dst = ${phpSingleQuote(documentRoot)};
         $it = new RecursiveIteratorIterator(
             new RecursiveDirectoryIterator($src, RecursiveDirectoryIterator::SKIP_DOTS),
             RecursiveIteratorIterator::SELF_FIRST
@@ -182,7 +182,7 @@ export const wordpressAdapter = {
       await runPhpCode(
         php,
         `
-        $root = ${JSON.stringify(documentRoot)};
+        $root = ${phpSingleQuote(documentRoot)};
         $copy = $root . '/wp-content/plugins/sqlite-database-integration/db.copy';
         $dbPhp = file_get_contents($copy);
         $dbPhp = str_replace(
@@ -209,7 +209,7 @@ export const wordpressAdapter = {
         'NONCE_SALT',
       ];
       const salts = saltNames
-        .map((name) => `define('${name}', ${JSON.stringify(randomBytes(32).toString('hex'))});`)
+        .map((name) => `define('${name}', ${phpSingleQuote(randomBytes(32).toString('hex'))});`)
         .join('\n');
 
       const wpConfig = `<?php
@@ -220,8 +220,8 @@ define('DB_HOST', 'localhost');
 define('DB_CHARSET', 'utf8');
 define('DB_COLLATE', '');
 ${salts}
-define('WP_HOME', ${JSON.stringify(url)});
-define('WP_SITEURL', ${JSON.stringify(url)});
+define('WP_HOME', ${phpSingleQuote(url)});
+define('WP_SITEURL', ${phpSingleQuote(url)});
 define('WP_DEBUG', false);
 $table_prefix = 'wp_';
 if (!defined('ABSPATH')) {
@@ -304,8 +304,8 @@ export function detectWordPressAutoMount(dir) {
           await runPhpCode(
             php,
             `
-            require_once ${JSON.stringify(documentRoot)} . '/wp-load.php';
-            switch_theme(${JSON.stringify(slug)});
+            require_once ${phpSingleQuote(documentRoot)} . '/wp-load.php';
+            switch_theme(${phpSingleQuote(slug)});
             `
           );
         },
@@ -332,9 +332,9 @@ export function detectWordPressAutoMount(dir) {
           await runPhpCode(
             php,
             `
-            require_once ${JSON.stringify(documentRoot)} . '/wp-load.php';
+            require_once ${phpSingleQuote(documentRoot)} . '/wp-load.php';
             require_once ABSPATH . 'wp-admin/includes/plugin.php';
-            $result = activate_plugin(${JSON.stringify(pluginPath)});
+            $result = activate_plugin(${phpSingleQuote(pluginPath)});
             if (is_wp_error($result)) {
                 throw new RuntimeException($result->get_error_message());
             }

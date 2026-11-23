@@ -14,7 +14,9 @@ import {
   getCacheDir,
   listAdapters,
   loadBlueprint,
+  packZip,
   parseMountSpec,
+  phpSingleQuote,
   randomPassword,
   registerAdapter,
   resolveVfsPath,
@@ -529,5 +531,57 @@ describe('@cms-playground/core', () => {
       }
       rmSync(workDir, { recursive: true, force: true });
     }
+  });
+
+  it('escapes PHP single-quoted literals safely and supports $ in unpackZip/packZip paths', async () => {
+    const php = await bootPhp('8.4');
+    try {
+      const payload = `price $foo {${'${exit(1)}'}} 'quoted' \\backslash\\`;
+      const result = await runPhpCode(php, `$foo = 'INJECTED'; echo ${phpSingleQuote(payload)};`);
+      assert.equal(result.text, payload);
+
+      const srcDir = '/tmp/src-$dir';
+      const dstDir = '/tmp/dst-$dir';
+      php.mkdir(srcDir);
+      php.writeFile(`${srcDir}/hello.txt`, 'safe-dollar-path');
+
+      const archive = await packZip(php, srcDir);
+      await unpackZip(php, archive, dstDir);
+      assert.equal(php.readFileAsText(`${dstDir}/hello.txt`), 'safe-dollar-path');
+    } finally {
+      php.exit();
+    }
+  });
+
+  it('drains in-flight PHP requests cleanly on close() without aborting WASM', async () => {
+    const slowAdapter = {
+      name: 'test-slow-close',
+      label: 'Test Slow Close',
+      aliases: ['test-slow-close'],
+      defaultPhp: '8.4',
+      supportedPhp: ['8.4'],
+      defaultVersion: '1.0',
+      async resolveBundle() {
+        return { version: '1.0' };
+      },
+      async install({ php, documentRoot }) {
+        php.writeFile(`${documentRoot}/slow.php`, '<?php usleep(150000); echo "done";');
+      },
+      async configure() {
+        return { username: 'admin', password: 'secret' };
+      },
+    };
+
+    const instance = await startPlayground({
+      adapter: slowAdapter,
+      port: 0,
+      log: () => {},
+    });
+
+    // Fire an in-flight request and immediately initiate close().
+    const pendingFetch = fetch(`${instance.url}/slow.php`).catch(() => null);
+    await new Promise((r) => setTimeout(r, 30));
+    await assert.doesNotReject(() => instance.close());
+    await pendingFetch;
   });
 });

@@ -4,8 +4,9 @@
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { DEFAULT_FETCH_TIMEOUT_MS } from './cache.js';
 import { EXIT_CODES, PlaygroundError, formatJsonPointer } from './errors.js';
-import { runPhpCode, unpackZip } from './runtime.js';
+import { phpSingleQuote, runPhpCode, unpackZip } from './runtime.js';
 
 export const CORE_STEP_SCHEMAS = Object.freeze({
   runPHP: Object.freeze({
@@ -40,7 +41,7 @@ export const CORE_STEPS = {
       });
     }
     const cleaned = code.replace(/^\s*<\?(?:php)?\s*/i, '');
-    await runPhpCode(context.php, `chdir(${JSON.stringify(context.documentRoot)});\n${cleaned}`);
+    await runPhpCode(context.php, `chdir(${phpSingleQuote(context.documentRoot)});\n${cleaned}`);
   },
 
   async writeFile({ path, data }, context) {
@@ -110,7 +111,10 @@ export const CORE_STEPS = {
 
       bytes = new Uint8Array(readFileSync(fileURLToPath(resolved)));
     } else {
-      const response = await fetch(resolved.href, { redirect: 'follow' });
+      const response = await fetch(resolved.href, {
+        redirect: 'follow',
+        signal: AbortSignal.timeout(DEFAULT_FETCH_TIMEOUT_MS),
+      });
 
       if (!response.ok) {
         throw new PlaygroundError(`Cannot download ${resolved.href}: HTTP ${response.status}`, {
@@ -214,7 +218,10 @@ function validateBlueprint(blueprint, source) {
  */
 export async function loadBlueprint(source) {
   if (/^https?:\/\//i.test(source)) {
-    const response = await fetch(source, { redirect: 'follow' });
+    const response = await fetch(source, {
+      redirect: 'follow',
+      signal: AbortSignal.timeout(DEFAULT_FETCH_TIMEOUT_MS),
+    });
 
     if (!response.ok) {
       throw new PlaygroundError(`Cannot fetch blueprint ${source}: HTTP ${response.status}`, {

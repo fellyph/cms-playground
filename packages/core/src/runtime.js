@@ -102,6 +102,14 @@ export async function runPhpCode(php, code) {
 }
 
 /**
+ * Safely encodes a JS string as a PHP single-quoted string literal so `$`
+ * characters cannot trigger PHP double-quoted variable interpolation.
+ */
+export function phpSingleQuote(value) {
+  return `'${String(value).replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
+}
+
+/**
  * Unpacks a zip archive (Uint8Array) into a target directory inside PHP's virtual filesystem.
  */
 export async function unpackZip(php, zipBytes, targetDir = DOCUMENT_ROOT) {
@@ -115,7 +123,7 @@ export async function unpackZip(php, zipBytes, targetDir = DOCUMENT_ROOT) {
       php,
       `
       $zip = new ZipArchive();
-      if ($zip->open(${JSON.stringify(tmpPath)}) !== true) {
+      if ($zip->open(${phpSingleQuote(tmpPath)}) !== true) {
           throw new RuntimeException('Cannot open zip archive');
       }
       for ($i = 0; $i < $zip->numFiles; $i++) {
@@ -134,7 +142,7 @@ export async function unpackZip(php, zipBytes, targetDir = DOCUMENT_ROOT) {
               throw new RuntimeException('Unsafe zip entry path: ' . $entry);
           }
       }
-      if (!$zip->extractTo(${JSON.stringify(targetDir)})) {
+      if (!$zip->extractTo(${phpSingleQuote(targetDir)})) {
           $zip->close();
           throw new RuntimeException('Cannot extract zip archive');
       }
@@ -160,9 +168,9 @@ export async function packZip(php, sourceDir = DOCUMENT_ROOT) {
     await runPhpCode(
       php,
       `
-      $root = rtrim(${JSON.stringify(sourceDir)}, '/');
+      $root = rtrim(${phpSingleQuote(sourceDir)}, '/');
       $zip = new ZipArchive();
-      if ($zip->open(${JSON.stringify(tmpPath)}, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
+      if ($zip->open(${phpSingleQuote(tmpPath)}, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
           throw new RuntimeException('Cannot create snapshot zip archive');
       }
       $it = new RecursiveIteratorIterator(

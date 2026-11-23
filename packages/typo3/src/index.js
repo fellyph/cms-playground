@@ -7,6 +7,7 @@ import {
   DOCUMENT_ROOT,
   fetchCachedBytes,
   moveDirectoryContents,
+  phpSingleQuote,
   runPhpCode,
 } from '@cms-playground/core';
 
@@ -40,7 +41,7 @@ const blueprintSteps = {
       `
       $data = json_decode(file_get_contents('/tmp/typo3-sitename.json'), true);
       unlink('/tmp/typo3-sitename.json');
-      $root = ${JSON.stringify(context.documentRoot)};
+      $root = ${phpSingleQuote(context.documentRoot)};
       $candidates = [
           $root . '/typo3conf/system/settings.php',
           $root . '/config/system/settings.php',
@@ -168,7 +169,7 @@ export const typo3Adapter = {
 
       // SetupCommand can end its PHP request. Configure host validation in a fresh one.
       await runPhpCode(php, `
-        $root = ${JSON.stringify(documentRoot)};
+        $root = ${phpSingleQuote(documentRoot)};
         $host = base64_decode('${Buffer.from(new URL(url).hostname).toString('base64')}');
         $hosts = array_unique(['localhost', '127.0.0.1', '[::1]', $host]);
         $trustedHosts = array_map(static fn ($name) => preg_quote($name, '/'), $hosts);
