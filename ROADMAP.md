@@ -52,7 +52,7 @@ A phased roadmap for `@cms-playground`, modeled on [`@wp-playground/cli`](https:
   - Download and cache `wp-cli.phar` automatically so `cms-playground cli --wp -- plugin list` works identically to `cms-playground cli --joomla -- user:list`.
 - [ ] **Cross-CMS Blueprint conventions**
   - Support portable core steps (`runPHP`, `writeFile`, `mkdir`, `unzip`, `runSql`) alongside CMS-specific steps, with JSON Schema validation and clear error messages.
-- [ ] **Persistent `--site` management**
+- [x] **Persistent `--site` management**
   - Add `--reset` flag and safe lock/dirty checks when reusing a local `--site=<dir>`.
 
 ---

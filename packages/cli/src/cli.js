@@ -15,10 +15,13 @@ import {
   EXIT_CODES,
   PlaygroundError,
   buildSnapshot,
+  clearCache,
   getAdapter,
+  inspectCache,
   listAdapters,
   parseMountSpec,
   registerAdapter,
+  resolveCacheRoot,
   runBlueprintHeadless,
   runCmsCli,
   startPlayground,
@@ -69,6 +72,7 @@ Usage:
   cms-playground fetch          [path] --joomla [options]
   cms-playground setup agent    [--agent <id>] [--project] [--yes] [--skip-mcp] [--dry-run]
   cms-playground agents init    [--cwd=<path>] [--dry-run] [--json]
+  cms-playground cache          <path|ls|clear> [--joomla|--wp|...] [--json]
   cms-playground mcp            [--cwd=<path>]
   cms-playground list
   cms-playground map            [--json | --paths]
@@ -81,6 +85,7 @@ Commands:
   fetch           One-shot HTTP request and verification against a booted CMS route
   setup agent     Install the bundled Agent Skill and configure MCP for coding agents
   agents init     Scaffold or update the @cms-playground block in AGENTS.md
+  cache           Inspect or clear the local CMS bundle cache (path, ls, clear)
   mcp             Start a local stdio MCP server for coding agents
   list            Show registered CMS adapters and supported PHP versions
   map             Output a machine-readable catalog of commands, adapters, and Blueprint steps
@@ -97,6 +102,7 @@ Options:
   --port=<number>                Local HTTP port (default: 8790)
   --host=<address>               Bind address (default: 127.0.0.1)
   --site=<dir>                   Mount an existing local site directory instead of a fresh bundle
+  --reset                        Re-initialize a persistent --site directory from a fresh bundle
   --blueprint=<src>              Blueprint JSON file path or URL to execute after boot
   --output=<path>                Output .zip path for build-snapshot
   --mount=<src:vfs>              Mount a host folder into VFS after configure (repeatable)
@@ -214,6 +220,7 @@ export function parseCliArgs(argv, { env = process.env, cwd = process.cwd() } = 
     port: 8790,
     host: '127.0.0.1',
     site: null,
+    reset: false,
     blueprint: null,
     output: null,
     cwd: resolvedCwd,
@@ -303,6 +310,11 @@ export function parseCliArgs(argv, { env = process.env, cwd = process.cwd() } = 
 
     if (arg === '--fail-on-php-error') {
       options.failOnPhpError = true;
+      continue;
+    }
+
+    if (arg === '--reset') {
+      options.reset = true;
       continue;
     }
 
@@ -443,7 +455,7 @@ export function parseCliArgs(argv, { env = process.env, cwd = process.cwd() } = 
 
     if (!command) {
       command = arg;
-    } else if ((command === 'setup' || command === 'agents' || command === 'fetch') && !subcommand) {
+    } else if ((command === 'setup' || command === 'agents' || command === 'cache' || command === 'fetch') && !subcommand) {
       subcommand = arg;
     } else {
       throw new PlaygroundError(`Unexpected argument: ${arg}`, {
@@ -485,6 +497,20 @@ function emitJson(data) {
   console.log(JSON.stringify({ data }));
 }
 
+function formatBytes(bytes) {
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
+  const units = ['KB', 'MB', 'GB'];
+  let value = bytes / 1024;
+  let idx = 0;
+  while (value >= 1024 && idx < units.length - 1) {
+    value /= 1024;
+    idx += 1;
+  }
+  return `${value.toFixed(1)} ${units[idx]}`;
+}
+
 /**
  * Main CLI entrypoint.
  */
@@ -515,7 +541,7 @@ export async function run(argv = process.argv.slice(2), { env = process.env, cwd
     if (options.json) {
       emitJson({
         help: HELP_TEXT,
-        commands: ['start', 'run-blueprint', 'build-snapshot', 'cli', 'fetch', 'setup agent', 'agents init', 'mcp', 'list', 'map'],
+        commands: ['start', 'run-blueprint', 'build-snapshot', 'cli', 'fetch', 'setup agent', 'agents init', 'cache', 'mcp', 'list', 'map'],
       });
     } else {
       console.log(HELP_TEXT);
@@ -571,6 +597,74 @@ export async function run(argv = process.argv.slice(2), { env = process.env, cwd
     }
 
     return EXIT_CODES.OK;
+  }
+
+  if (command === 'cache') {
+    const action = subcommand ?? 'ls';
+
+    if (action === 'path') {
+      const root = resolveCacheRoot();
+      const exists = existsSync(root);
+
+      if (options.json) {
+        emitJson({ path: root, exists });
+      } else {
+        console.log(root);
+      }
+
+      return EXIT_CODES.OK;
+    }
+
+    if (action === 'ls') {
+      const summary = inspectCache({ cms });
+
+      if (options.json) {
+        emitJson(summary);
+      } else if (!options.quiet) {
+        console.log(`Cache root: ${summary.root}`);
+        if (summary.buckets.length === 0) {
+          console.log(cms ? `No cached files for --${cms}.` : 'Cache is empty.');
+        } else {
+          for (const bucket of summary.buckets) {
+            console.log(
+              `  ${bucket.name.padEnd(14)} ${String(bucket.files).padStart(5)} file(s)  ${formatBytes(bucket.bytes)}`
+            );
+          }
+          console.log(`Total: ${summary.totalFiles} file(s), ${formatBytes(summary.totalBytes)}`);
+        }
+      }
+
+      return EXIT_CODES.OK;
+    }
+
+    if (action === 'clear') {
+      const result = clearCache({ cms });
+
+      if (options.json) {
+        emitJson(result);
+      } else if (!options.quiet) {
+        if (!result.cleared) {
+          console.log(cms ? `No cached files for --${cms}.` : 'Cache is already empty.');
+        } else {
+          const scope = cms ? `--${cms} cache` : 'cache';
+          console.log(
+            `Cleared ${scope} (${result.removedFiles} file(s), ${formatBytes(result.freedBytes)} freed).`
+          );
+        }
+      }
+
+      return EXIT_CODES.OK;
+    }
+
+    throw new PlaygroundError(
+      `Unknown cache subcommand "${action}". Expected one of: path, ls, clear`,
+      {
+        code: 'unknown_command',
+        exitCode: EXIT_CODES.VALIDATION,
+        recovery: 'cms-playground cache ls',
+        suggestions: ['Use "cms-playground cache path", "cms-playground cache ls", or "cms-playground cache clear".'],
+      }
+    );
   }
 
   if (command === 'setup') {
@@ -664,6 +758,7 @@ export async function run(argv = process.argv.slice(2), { env = process.env, cwd
       port: options.port,
       host: options.host,
       site: resolvedSite,
+      reset: options.reset,
       mountsBeforeInstall: options.mountsBeforeInstall,
       mounts: options.mounts,
       autoMount: resolvedAutoMount,
@@ -714,6 +809,7 @@ export async function run(argv = process.argv.slice(2), { env = process.env, cwd
       version: cmsVersion,
       phpVersion: options.php,
       site: resolvedSite,
+      reset: options.reset,
       mountsBeforeInstall: options.mountsBeforeInstall,
       mounts: options.mounts,
       autoMount: resolvedAutoMount,
@@ -746,6 +842,7 @@ export async function run(argv = process.argv.slice(2), { env = process.env, cwd
       version: cmsVersion,
       phpVersion: options.php,
       site: resolvedSite,
+      reset: options.reset,
       mountsBeforeInstall: options.mountsBeforeInstall,
       mounts: options.mounts,
       autoMount: resolvedAutoMount,
@@ -774,6 +871,7 @@ export async function run(argv = process.argv.slice(2), { env = process.env, cwd
       adapter,
       args: passthrough,
       site: resolvedSite,
+      reset: options.reset,
       version: cmsVersion,
       phpVersion: options.php,
       mountsBeforeInstall: options.mountsBeforeInstall,

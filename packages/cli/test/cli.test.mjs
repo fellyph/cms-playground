@@ -278,4 +278,57 @@ describe('@cms-playground/cli run() command dispatch', () => {
       (err) => err instanceof PlaygroundError && err.code === 'cwd_not_found' && err.exitCode === EXIT_CODES.NOT_FOUND
     );
   });
+
+  it('parses and executes cache path, ls, clear, and --reset flag', async () => {
+    const parsedReset = parseCliArgs(['start', '--joomla', '--site=./my-site', '--reset']);
+    assert.equal(parsedReset.options.reset, true);
+    assert.equal(parsedReset.options.site, './my-site');
+
+    const parsedCache = parseCliArgs(['cache', 'clear', '--joomla', '--json']);
+    assert.equal(parsedCache.command, 'cache');
+    assert.equal(parsedCache.subcommand, 'clear');
+    assert.equal(parsedCache.cms, 'joomla');
+    assert.equal(parsedCache.options.json, true);
+
+    const workDir = mkdtempSync(join(tmpdir(), 'cms-pg-cli-cache-'));
+    const cacheRoot = join(workDir, 'cache');
+    const prevCacheDir = process.env.CMS_PLAYGROUND_CACHE_DIR;
+
+    try {
+      process.env.CMS_PLAYGROUND_CACHE_DIR = cacheRoot;
+
+      const { result: pathCode, output: pathOut } = await captureLogs(() => run(['cache', 'path', '--json']));
+      assert.equal(pathCode, 0);
+      assert.deepEqual(JSON.parse(pathOut).data, { path: cacheRoot, exists: false });
+
+      mkdirSync(join(cacheRoot, 'joomla'), { recursive: true });
+      writeFileSync(join(cacheRoot, 'joomla', 'site.zip'), 'abcdef');
+
+      const { result: lsCode, output: lsOut } = await captureLogs(() => run(['cache', 'ls', '--json']));
+      assert.equal(lsCode, 0);
+      const lsData = JSON.parse(lsOut).data;
+      assert.equal(lsData.totalFiles, 1);
+      assert.equal(lsData.totalBytes, 6);
+
+      const { result: clearCode, output: clearOut } = await captureLogs(() =>
+        run(['cache', 'clear', '--joomla', '--json'])
+      );
+      assert.equal(clearCode, 0);
+      const clearData = JSON.parse(clearOut).data;
+      assert.equal(clearData.cleared, true);
+      assert.equal(clearData.removedFiles, 1);
+
+      await assert.rejects(
+        () => run(['cache', 'bogus']),
+        (err) => err instanceof PlaygroundError && err.code === 'unknown_command'
+      );
+    } finally {
+      if (prevCacheDir === undefined) {
+        delete process.env.CMS_PLAYGROUND_CACHE_DIR;
+      } else {
+        process.env.CMS_PLAYGROUND_CACHE_DIR = prevCacheDir;
+      }
+      rmSync(workDir, { recursive: true, force: true });
+    }
+  });
 });

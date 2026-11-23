@@ -1,10 +1,17 @@
 import assert from 'node:assert/strict';
 import http from 'node:http';
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
-import { downloadToCache, fetchCachedBytes, getCacheDir } from '../src/index.js';
+import {
+  clearCache,
+  downloadToCache,
+  fetchCachedBytes,
+  getCacheDir,
+  inspectCache,
+  resolveCacheRoot,
+} from '../src/index.js';
 
 describe('@cms-playground/core cache', () => {
   it('resolves getCacheDir from CMS_PLAYGROUND_CACHE_DIR, XDG_CACHE_HOME, and creates nested segments', () => {
@@ -102,6 +109,82 @@ describe('@cms-playground/core cache', () => {
         server.close(() => r());
         server.closeAllConnections?.();
       });
+      rmSync(workDir, { recursive: true, force: true });
+    }
+  });
+
+  it('inspects and clears cache buckets safely via resolveCacheRoot, inspectCache, and clearCache', () => {
+    const workDir = mkdtempSync(join(tmpdir(), 'cms-pg-cache-mgmt-'));
+    const cacheRoot = join(workDir, 'cache');
+    const prevCacheDir = process.env.CMS_PLAYGROUND_CACHE_DIR;
+
+    try {
+      process.env.CMS_PLAYGROUND_CACHE_DIR = cacheRoot;
+
+      // resolveCacheRoot does not create the directory on disk
+      assert.equal(resolveCacheRoot(), cacheRoot);
+      assert.equal(existsSync(cacheRoot), false);
+
+      const empty = inspectCache();
+      assert.equal(empty.exists, false);
+      assert.deepEqual(empty.buckets, []);
+      assert.equal(empty.totalFiles, 0);
+      assert.equal(empty.totalBytes, 0);
+
+      // Populate joomla and wp buckets
+      mkdirSync(join(cacheRoot, 'joomla', '6.2.0'), { recursive: true });
+      mkdirSync(join(cacheRoot, 'wp'), { recursive: true });
+      writeFileSync(join(cacheRoot, 'joomla', '6.2.0', 'site.zip'), '1234567890');
+      writeFileSync(join(cacheRoot, 'wp', 'latest.zip'), '12345');
+
+      const all = inspectCache();
+      assert.equal(all.exists, true);
+      assert.equal(all.totalFiles, 2);
+      assert.equal(all.totalBytes, 15);
+      assert.deepEqual(
+        all.buckets.map((b) => ({ name: b.name, files: b.files, bytes: b.bytes })),
+        [
+          { name: 'joomla', files: 1, bytes: 10 },
+          { name: 'wp', files: 1, bytes: 5 },
+        ]
+      );
+
+      // Filter by single CMS
+      const joomlaOnly = inspectCache({ cms: 'joomla' });
+      assert.equal(joomlaOnly.totalFiles, 1);
+      assert.equal(joomlaOnly.totalBytes, 10);
+
+      // Reject invalid bucket names
+      assert.throws(() => inspectCache({ cms: '../evil' }), /Invalid cache bucket name/);
+      assert.throws(() => clearCache({ cms: '../evil' }), /Invalid cache bucket name/);
+
+      // Clear single CMS bucket leaves others intact
+      const clearedJoomla = clearCache({ cms: 'joomla' });
+      assert.equal(clearedJoomla.cleared, true);
+      assert.deepEqual(clearedJoomla.removedBuckets, ['joomla']);
+      assert.equal(clearedJoomla.removedFiles, 1);
+      assert.equal(clearedJoomla.freedBytes, 10);
+      assert.equal(existsSync(join(cacheRoot, 'joomla')), false);
+      assert.equal(existsSync(join(cacheRoot, 'wp', 'latest.zip')), true);
+
+      // Clearing already-empty bucket is a no-op
+      const secondClear = clearCache({ cms: 'joomla' });
+      assert.equal(secondClear.cleared, false);
+      assert.equal(secondClear.removedFiles, 0);
+
+      // Clear entire cache root
+      const clearedAll = clearCache();
+      assert.equal(clearedAll.cleared, true);
+      assert.deepEqual(clearedAll.removedBuckets, ['wp']);
+      assert.equal(clearedAll.removedFiles, 1);
+      assert.equal(clearedAll.freedBytes, 5);
+      assert.equal(inspectCache().totalFiles, 0);
+    } finally {
+      if (prevCacheDir === undefined) {
+        delete process.env.CMS_PLAYGROUND_CACHE_DIR;
+      } else {
+        process.env.CMS_PLAYGROUND_CACHE_DIR = prevCacheDir;
+      }
       rmSync(workDir, { recursive: true, force: true });
     }
   });
