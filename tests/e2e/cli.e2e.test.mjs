@@ -19,6 +19,17 @@ import {
   startCliServer,
 } from './helpers.mjs';
 
+function assertStoppedCleanly(exit, signal) {
+  if (process.platform === 'win32') {
+    assert.ok(
+      exit.code === 0 || exit.signal === signal,
+      `Expected exit code 0 or signal ${signal} on Windows, got code=${exit.code} signal=${exit.signal}`
+    );
+  } else {
+    assert.equal(exit.code, 0);
+  }
+}
+
 describe('CLI E2E: start command, routing & signal handling', () => {
   it('starts a Joomla site, serves SEF routes and 404s, and exits cleanly on SIGTERM', async () => {
     const tmp = createTempDir('e2e-joomla-start-');
@@ -57,7 +68,7 @@ describe('CLI E2E: start command, routing & signal handling', () => {
         assert.equal(missingAdmin.status, 404);
       } finally {
         const exit = await server.stop('SIGTERM');
-        assert.equal(exit.code, 0);
+        assertStoppedCleanly(exit, 'SIGTERM');
       }
     } finally {
       tmp.cleanup();
@@ -92,7 +103,7 @@ describe('CLI E2E: start command, routing & signal handling', () => {
         assert.equal(missingPhp.status, 404);
       } finally {
         const exit = await server.stop('SIGINT');
-        assert.equal(exit.code, 0);
+        assertStoppedCleanly(exit, 'SIGINT');
       }
     } finally {
       tmp.cleanup();
@@ -222,7 +233,7 @@ describe('CLI E2E: mounts and verbosity', () => {
       } finally {
         child.kill('SIGTERM');
         const exit = await exitPromise;
-        assert.equal(exit.code, 0);
+        assertStoppedCleanly(exit, 'SIGTERM');
       }
     } finally {
       tmp.cleanup();
@@ -468,7 +479,7 @@ describe('CLI E2E: setup agent', () => {
 
       const dryRun = await runCliProcess(['setup', 'agent', '--project', '--dry-run'], {
         cwd: projectDir,
-        env: { HOME: homeDir },
+        env: { HOME: homeDir, USERPROFILE: homeDir },
       });
 
       assert.equal(dryRun.exitCode, 0, dryRun.stderr);
@@ -477,7 +488,7 @@ describe('CLI E2E: setup agent', () => {
 
       const applied = await runCliProcess(['setup', 'agent', '-y', '--project'], {
         cwd: projectDir,
-        env: { HOME: homeDir },
+        env: { HOME: homeDir, USERPROFILE: homeDir },
       });
 
       assert.equal(applied.exitCode, 0, applied.stderr);
@@ -636,7 +647,7 @@ describe('CLI E2E: --json receipts, agent mode, --cwd, and classified exit codes
       } finally {
         child.kill('SIGTERM');
         const exit = await exitPromise;
-        assert.equal(exit.code, 0);
+        assertStoppedCleanly(exit, 'SIGTERM');
       }
     } finally {
       tmp.cleanup();

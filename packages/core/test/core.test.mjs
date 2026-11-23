@@ -2,8 +2,9 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { describe, it } from 'node:test';
+import { pathToFileURL } from 'node:url';
 import {
   CORE_STEPS,
   bootPhp,
@@ -59,7 +60,7 @@ describe('@cms-playground/core', () => {
     const parsed = parseMountSpec('./src:/var/www/html/plugins/system/test');
 
     assert.equal(parsed.vfsPath, '/var/www/html/plugins/system/test');
-    assert.ok(parsed.hostPath.endsWith('/src'));
+    assert.equal(parsed.hostPath, resolve('./src'));
 
     // Valid Windows drive-letter mount spec
     const winParsed = parseMountSpec('C:\\src:/var/www/html/plugins/system/test');
@@ -335,7 +336,7 @@ describe('@cms-playground/core', () => {
       await assert.rejects(
         () =>
           CORE_STEPS.unzip(
-            { url: `file://${zipPath}` },
+            { url: pathToFileURL(zipPath).href },
             { baseUrl: 'https://example.com/blueprint.json', documentRoot: '/var/www/html' }
           ),
         /non-local blueprint/
