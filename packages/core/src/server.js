@@ -119,7 +119,7 @@ async function bootSite({
   }
 
   statusLog(`Booting PHP ${effectivePhp} (WebAssembly)...`);
-  const php = await bootPhp({ phpVersion: String(effectivePhp) });
+  const php = await bootPhp({ phpVersion: String(effectivePhp), extensions: adapter.phpExtensions });
 
   try {
     let bundle = null;
@@ -601,7 +601,7 @@ export async function runCmsCli({
       booted.php.exit();
     } catch {}
 
-    const php = await bootPhp({ phpVersion: effectivePhp });
+    const php = await bootPhp({ phpVersion: effectivePhp, extensions: adapter.phpExtensions });
 
     try {
       await php.mount(DOCUMENT_ROOT, createNodeFsMountHandler(hostSiteDir));

@@ -1,6 +1,6 @@
 # Getting Started with `@cms-playground`
 
-`@cms-playground` lets you boot **Joomla**, **WordPress**, and other PHP CMSs locally inside WebAssembly (`@php-wasm/node`)—with no local PHP, Apache/Nginx, or MySQL installation required.
+`@cms-playground` lets you boot **Joomla**, **WordPress**, **Drupal**, **TYPO3**, and **Kirby** locally inside WebAssembly (`@php-wasm/node`)—with no local PHP, Apache/Nginx, or MySQL installation required.
 
 ---
 
@@ -59,6 +59,18 @@ npx @cms-playground/cli start --wp=6.7 --php=8.4 --port=8791
 ```bash
 npx @cms-playground/cli start --wordpress=6.7 --port=8792
 ```
+
+### Start a disposable Drupal, TYPO3, or Kirby site
+
+```bash
+npx @cms-playground/cli start --drupal
+npx @cms-playground/cli start --typo3
+npx @cms-playground/cli start --kirby
+```
+
+- **Drupal** (`--drupal[=<ver>]`): Downloads official Drupal core, installs on SQLite (`minimal` profile), and serves the frontend and `/user/login`.
+- **TYPO3** (`--typo3[=<ver>]`): Downloads official TYPO3 (default `13`), runs SQLite setup, and serves the backend at `/typo3` (plus native `cms-playground cli --typo3 -- <args>`).
+- **Kirby** (`--kirby[=<ver>]`): Downloads the official Kirby Starterkit (flat-file, zero DB), creates a Panel admin account (`admin@example.com`), and serves the frontend and `/panel`.
 
 ### Auto-mount a local extension, plugin, or theme
 

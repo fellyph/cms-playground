@@ -23,7 +23,10 @@ import {
   runCmsCli,
   startPlayground,
 } from '@cms-playground/core';
+import { drupalAdapter } from '@cms-playground/drupal';
 import { joomlaAdapter } from '@cms-playground/joomla';
+import { kirbyAdapter } from '@cms-playground/kirby';
+import { typo3Adapter } from '@cms-playground/typo3';
 import { wordpressAdapter } from '@cms-playground/wordpress';
 import { buildCliMap, buildCliPaths } from './map.js';
 import { setupAgent } from './setup-agent.js';
@@ -33,6 +36,9 @@ export { buildCliMap, buildCliPaths };
 // Register built-in CMS adapters.
 registerAdapter(joomlaAdapter);
 registerAdapter(wordpressAdapter);
+registerAdapter(drupalAdapter);
+registerAdapter(typo3Adapter);
+registerAdapter(kirbyAdapter);
 
 const VERBOSITY_LEVELS = ['quiet', 'normal', 'debug'];
 
@@ -42,6 +48,9 @@ export const HELP_TEXT = `
 Usage:
   cms-playground start          --joomla[=<version>] [options]
   cms-playground start          --wp[=<version>]     [options]
+  cms-playground start          --drupal[=<version>] [options]
+  cms-playground start          --typo3[=<version>]  [options]
+  cms-playground start          --kirby[=<version>]  [options]
   cms-playground run-blueprint  --joomla --blueprint=<file|url> [options]
   cms-playground build-snapshot --joomla --output=./snapshot.zip [options]
   cms-playground cli            --joomla [options] -- <cms-cli-args...>
@@ -61,6 +70,9 @@ Commands:
 CMS Selection (pick one):
   --joomla[=<ver>]   Run Joomla (default: latest, e.g. --joomla or --joomla=6.2)
   --wp[=<ver>]       Run WordPress (default: latest, e.g. --wp or --wp=6.7)
+  --drupal[=<ver>]   Run Drupal (default: latest, e.g. --drupal or --drupal=11.4.13)
+  --typo3[=<ver>]    Run TYPO3 (default: 13, e.g. --typo3 or --typo3=13.4)
+  --kirby[=<ver>]    Run Kirby (default: latest, e.g. --kirby or --kirby=5.6.4)
 
 Options:
   --php=<version>                PHP version (e.g. 8.3, 8.4, 8.5)
@@ -71,7 +83,7 @@ Options:
   --output=<path>                Output .zip path for build-snapshot
   --mount=<src:vfs>              Mount a host folder into VFS after configure (repeatable)
   --mount-before-install=<s:v>   Mount a host folder into VFS before configure (repeatable)
-  --auto-mount[=dir]             Auto-detect and mount a Joomla extension or WP plugin/theme (default: CWD)
+  --auto-mount[=dir]             Auto-detect and mount a local CMS extension, theme, or content directory (default: CWD)
   --cwd=<path>                   Resolve relative paths (--site, --blueprint, --mount, --auto-mount, --output) from <path>
   --json                         Emit machine-readable JSON receipts to stdout and structured errors to stderr
   --paths                        Print canonical command invocations one per line (for map)

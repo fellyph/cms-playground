@@ -1,0 +1,32 @@
+{
+  "name": "@cms-playground/typo3",
+  "version": "0.1.0",
+  "description": "TYPO3 CMS adapter for @cms-playground (SQLite-backed PHP-WASM)",
+  "license": "GPL-2.0-or-later",
+  "type": "module",
+  "files": [
+    "src"
+  ],
+  "engines": {
+    "node": ">=24.18.0",
+    "npm": ">=11.16.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fellyph/cms-playground.git",
+    "directory": "packages/typo3"
+  },
+  "bugs": {
+    "url": "https://github.com/fellyph/cms-playground/issues"
+  },
+  "homepage": "https://github.com/fellyph/cms-playground#readme",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "dependencies": {
+    "@cms-playground/core": "0.1.0"
+  }
+}
