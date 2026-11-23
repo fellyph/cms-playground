@@ -7,10 +7,8 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { CORE_STEPS } from '@cms-playground/core';
+import { CORE_STEPS, listAdapters } from '@cms-playground/core';
 import { parseCliArgs } from '@cms-playground/cli';
-import { joomlaAdapter } from '@cms-playground/joomla';
-import { wordpressAdapter } from '@cms-playground/wordpress';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const CLI_BIN = join(ROOT, 'packages/cli/bin/cms-playground.mjs');
@@ -116,8 +114,7 @@ describe('Documentation verification', () => {
     ];
     const knownSteps = new Set([
       ...Object.keys(CORE_STEPS),
-      ...Object.keys(joomlaAdapter.blueprintSteps ?? {}),
-      ...Object.keys(wordpressAdapter.blueprintSteps ?? {}),
+      ...listAdapters().flatMap(adapter => Object.keys(adapter.blueprintSteps ?? {})),
     ]);
     let totalBlocks = 0;
 
@@ -168,6 +165,9 @@ describe('Documentation verification', () => {
       'map',
       '--joomla',
       '--wp',
+      '--drupal',
+      '--typo3',
+      '--kirby',
       '--php',
       '--port',
       '--site',
@@ -194,5 +194,8 @@ describe('Documentation verification', () => {
 
     assert.match(listOut, /--joomla/);
     assert.match(listOut, /--wp/);
+    assert.match(listOut, /--drupal/);
+    assert.match(listOut, /--typo3/);
+    assert.match(listOut, /--kirby/);
   });
 });

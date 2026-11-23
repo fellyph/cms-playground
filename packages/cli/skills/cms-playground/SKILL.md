@@ -1,6 +1,6 @@
 ---
 name: cms-playground
-description: "Run Joomla, WordPress, and other PHP CMSs locally in WebAssembly (@php-wasm/node) using @cms-playground/cli with zero server or database setup. Use when an agent needs to boot a disposable PHP CMS instance, auto-mount a local extension/plugin/theme, run headless Blueprints, execute native CMS CLIs (cli/joomla.php), or export .zip snapshots."
+description: "Run Joomla, WordPress, Drupal, TYPO3, and Kirby locally in WebAssembly (@php-wasm/node) using @cms-playground/cli with zero server or database setup. Use when an agent needs to boot a disposable PHP CMS instance, auto-mount a local extension/plugin/theme, run headless Blueprints, execute native CMS CLIs (cli/joomla.php), or export .zip snapshots."
 ---
 
 # `@cms-playground`
@@ -13,6 +13,9 @@ Pick exactly one CMS flag per command:
 
 - `--joomla[=<ver>]` — Joomla (SQLite pre-installed bundles, `cli/joomla.php`)
 - `--wp[=<ver>]` (or `--wordpress[=<ver>]`) — WordPress (SQLite database integration)
+- `--drupal[=<ver>]` for Drupal on SQLite
+- `--typo3[=<ver>]` for TYPO3 on SQLite
+- `--kirby[=<ver>]` for the flat-file Kirby Starterkit
 
 Run `cms-playground list` to inspect all registered adapters and their supported PHP versions.
 

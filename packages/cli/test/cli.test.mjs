@@ -36,6 +36,19 @@ describe('@cms-playground/cli parseCliArgs', () => {
     assert.equal(b.cmsVersion, '6.7');
   });
 
+  it('parses start --drupal, --typo3, and --kirby flags', () => {
+    const drupal = parseCliArgs(['start', '--drupal=11.4.13']);
+    const typo3 = parseCliArgs(['start', '--typo3=13.4']);
+    const kirby = parseCliArgs(['start', '--kirby']);
+
+    assert.equal(drupal.cms, 'drupal');
+    assert.equal(drupal.cmsVersion, '11.4.13');
+    assert.equal(typo3.cms, 'typo3');
+    assert.equal(typo3.cmsVersion, '13.4');
+    assert.equal(kirby.cms, 'kirby');
+    assert.equal(kirby.cmsVersion, null);
+  });
+
   it('parses cli passthrough arguments after --', () => {
     const parsed = parseCliArgs(['cli', '--joomla', '--site=./site', '--', 'user:list', '--format=json']);
 

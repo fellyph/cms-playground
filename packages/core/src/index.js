@@ -13,6 +13,7 @@ export {
   bootPhp,
   createRequestQueue,
   mountDirectories,
+  moveDirectoryContents,
   packZip,
   parseMountSpec,
   randomPassword,

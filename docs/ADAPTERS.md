@@ -16,6 +16,7 @@ export const myCmsAdapter = {
   aliases: ['mycms', 'mc'],      // Optional extra CLI flag aliases
   defaultPhp: '8.4',
   supportedPhp: ['8.3', '8.4'],
+  phpExtensions: ['intl'],       // Optional PHP-WASM extensions to load
   defaultVersion: 'latest',
   adminPath: '/admin/',
 
@@ -70,3 +71,6 @@ registerAdapter(myCmsAdapter);
 
 - **Joomla** ([`packages/joomla/src/index.js`](../packages/joomla/src/index.js)): Pre-installed SQLite bundles from `joomla-projects/joomla-playground`, on-demand `/media/*` caching, SEF URL rewrites, XML manifest `--auto-mount`, and `cli/joomla.php` passthrough.
 - **WordPress** ([`packages/wordpress/src/index.js`](../packages/wordpress/src/index.js)): Official WordPress zips paired with `sqlite-database-integration`, automatic `wp_install()`, pretty permalink rewrites, plugin/theme/`wp-content` `--auto-mount`, and WordPress blueprint steps.
+- **Drupal** ([`packages/drupal/src/index.js`](../packages/drupal/src/index.js)): Official Drupal core zips, programmatic SQLite installation, `*.info.yml` module/theme `--auto-mount`, and Drupal blueprint steps.
+- **TYPO3** ([`packages/typo3/src/index.js`](../packages/typo3/src/index.js)): Official TYPO3 classic release zips, non-interactive SQLite setup via `SetupCommand`, `ext_emconf.php`/`composer.json` `--auto-mount`, and `typo3` CLI passthrough.
+- **Kirby** ([`packages/kirby/src/index.js`](../packages/kirby/src/index.js)): Official Kirby Starterkit (flat-file, zero DB), automatic Panel admin user creation, plugin/site/content `--auto-mount`, and Kirby blueprint steps.

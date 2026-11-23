@@ -21,6 +21,12 @@
     "start:wp": "node packages/cli/bin/cms-playground.mjs start --wp",
     "release:preview": "npm pack --dry-run --workspaces",
     "release:patch": "npm version patch --workspaces --no-git-tag-version --workspaces-update=false && node scripts/sync-workspace-dependencies.mjs && npm install --package-lock-only --ignore-scripts",
-    "release:publish": "node scripts/publish-workspaces.mjs"
+    "release:publish": "node scripts/publish-workspaces.mjs",
+    "test:e2e:drupal": "node --test --test-timeout=240000 tests/e2e/drupal.e2e.test.mjs",
+    "start:drupal": "node packages/cli/bin/cms-playground.mjs start --drupal",
+    "test:e2e:typo3": "node --test --test-timeout=240000 tests/e2e/typo3.e2e.test.mjs",
+    "start:typo3": "node packages/cli/bin/cms-playground.mjs start --typo3",
+    "test:e2e:kirby": "node --test --test-timeout=240000 tests/e2e/kirby.e2e.test.mjs",
+    "start:kirby": "node packages/cli/bin/cms-playground.mjs start --kirby"
   }
 }

@@ -1,6 +1,6 @@
 # `@cms-playground`
 
-Run **Joomla**, **WordPress**, and other PHP CMSs locally in WebAssembly (`@php-wasm/node`) with zero server or database setup.
+Run **Joomla**, **WordPress**, **Drupal**, **TYPO3**, and **Kirby** locally in WebAssembly (`@php-wasm/node`) with zero server or database setup.
 
 ## Usage
 
@@ -12,6 +12,11 @@ npx @cms-playground/cli start --joomla=5.4 --php=8.3 --port=8790
 # Start a disposable WordPress site (SQLite-backed)
 npx @cms-playground/cli start --wp
 npx @cms-playground/cli start --wp=6.7 --php=8.4 --port=8791
+
+# Start a disposable Drupal, TYPO3, or Kirby site
+npx @cms-playground/cli start --drupal
+npx @cms-playground/cli start --typo3
+npx @cms-playground/cli start --kirby
 
 # Auto-detect and mount a local Joomla extension or WordPress plugin/theme
 npx @cms-playground/cli start --joomla --auto-mount
@@ -52,6 +57,9 @@ npx @cms-playground/cli list
 - [`packages/core`](packages/core) (`@cms-playground/core`): Shared `@php-wasm/node` bootstrap, request serialization queue, HTTP server, bundle cache (`~/.cache/cms-playground`), `NODEFS` mounts, snapshot packer, and base Blueprint runner.
 - [`packages/joomla`](packages/joomla) (`@cms-playground/joomla`): Joomla adapter using pre-installed SQLite bundles from `joomla-projects/joomla-playground`, on-demand `/media/*` static caching, SEF rewrites, XML `--auto-mount`, and `cli/joomla.php` support.
 - [`packages/wordpress`](packages/wordpress) (`@cms-playground/wordpress`): WordPress adapter using official WordPress zips + `sqlite-database-integration`, auto-install on SQLite, plugin/theme `--auto-mount`, and WordPress blueprint steps.
+- [`packages/drupal`](packages/drupal) (`@cms-playground/drupal`): Drupal adapter using official Drupal zips, automatic SQLite installation, `*.info.yml` module/theme `--auto-mount`, and Drupal blueprint steps.
+- [`packages/typo3`](packages/typo3) (`@cms-playground/typo3`): TYPO3 adapter using official TYPO3 release zips, non-interactive SQLite setup, `ext_emconf.php`/`composer.json` `--auto-mount`, and native `typo3` CLI support.
+- [`packages/kirby`](packages/kirby) (`@cms-playground/kirby`): Kirby adapter using the official Starterkit (flat-file, zero DB), automatic Panel admin account creation, plugin/site/content `--auto-mount`, and Kirby blueprint steps.
 - [`packages/cli`](packages/cli) (`@cms-playground/cli`): Unified CLI entrypoint (`cms-playground`).
 
 ## Testing
