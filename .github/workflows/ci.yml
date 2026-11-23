@@ -65,6 +65,22 @@ jobs:
       - run: npm run build:site
       - run: npm run test:website
 
+  release-preview:
+    name: Release Pack Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+
+      - run: npm ci
+      - run: npm run release:check
+
   e2e-cli:
     name: E2E (cli, ${{ matrix.os }})
     runs-on: ${{ matrix.os }}
