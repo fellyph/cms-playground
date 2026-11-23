@@ -28,11 +28,12 @@ import { joomlaAdapter } from '@cms-playground/joomla';
 import { kirbyAdapter } from '@cms-playground/kirby';
 import { typo3Adapter } from '@cms-playground/typo3';
 import { wordpressAdapter } from '@cms-playground/wordpress';
+import { initAgentsFile } from './agents-init.js';
 import { buildCliMap, buildCliPaths } from './map.js';
 import { MCP_TOOLS, createMcpServer, runMcpServer } from './mcp.js';
 import { setupAgent } from './setup-agent.js';
 
-export { MCP_TOOLS, buildCliMap, buildCliPaths, createMcpServer, runMcpServer };
+export { MCP_TOOLS, buildCliMap, buildCliPaths, createMcpServer, initAgentsFile, runMcpServer };
 
 // Register built-in CMS adapters.
 registerAdapter(joomlaAdapter);
@@ -56,6 +57,7 @@ Usage:
   cms-playground build-snapshot --joomla --output=./snapshot.zip [options]
   cms-playground cli            --joomla [options] -- <cms-cli-args...>
   cms-playground setup agent    [--agent <id>] [--project] [--yes] [--skip-mcp] [--dry-run]
+  cms-playground agents init    [--cwd=<path>] [--dry-run] [--json]
   cms-playground mcp            [--cwd=<path>]
   cms-playground list
   cms-playground map            [--json | --paths]
@@ -66,6 +68,7 @@ Commands:
   build-snapshot  Boot a CMS, optionally run a Blueprint, and export a .zip snapshot
   cli             Run the CMS's native CLI (e.g. cli/joomla.php) in PHP-WASM
   setup agent     Install the bundled Agent Skill and configure MCP for coding agents
+  agents init     Scaffold or update the @cms-playground block in AGENTS.md
   mcp             Start a local stdio MCP server for coding agents
   list            Show registered CMS adapters and supported PHP versions
   map             Output a machine-readable catalog of commands, adapters, and Blueprint steps
@@ -390,7 +393,7 @@ export function parseCliArgs(argv, { env = process.env, cwd = process.cwd() } = 
 
     if (!command) {
       command = arg;
-    } else if (command === 'setup' && !subcommand) {
+    } else if ((command === 'setup' || command === 'agents') && !subcommand) {
       subcommand = arg;
     } else {
       throw new PlaygroundError(`Unexpected argument: ${arg}`, {
@@ -462,7 +465,7 @@ export async function run(argv = process.argv.slice(2), { env = process.env, cwd
     if (options.json) {
       emitJson({
         help: HELP_TEXT,
-        commands: ['start', 'run-blueprint', 'build-snapshot', 'cli', 'setup agent', 'mcp', 'list', 'map'],
+        commands: ['start', 'run-blueprint', 'build-snapshot', 'cli', 'setup agent', 'agents init', 'mcp', 'list', 'map'],
       });
     } else {
       console.log(HELP_TEXT);
@@ -547,6 +550,31 @@ export async function run(argv = process.argv.slice(2), { env = process.env, cwd
     if (result.cancelled) {
       return EXIT_CODES.CANCELLED;
     }
+
+    if (options.json) {
+      emitJson(result);
+    }
+
+    return EXIT_CODES.OK;
+  }
+
+  if (command === 'agents') {
+    if (subcommand !== 'init') {
+      throw new PlaygroundError(
+        `Unknown agents subcommand "${subcommand ?? ''}". Usage: cms-playground agents init [options]`,
+        {
+          code: 'unknown_command',
+          exitCode: EXIT_CODES.VALIDATION,
+          recovery: 'cms-playground agents init',
+        }
+      );
+    }
+
+    const result = await initAgentsFile({
+      projectDir: baseDir,
+      dryRun: options.dryRun,
+      log: effectiveQuiet ? () => {} : (line) => console.log(line),
+    });
 
     if (options.json) {
       emitJson(result);
