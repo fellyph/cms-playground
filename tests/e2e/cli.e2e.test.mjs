@@ -926,3 +926,69 @@ describe('CLI E2E: agents init', () => {
     }
   });
 });
+
+describe('CLI E2E: fetch one-shot HTTP verification', () => {
+  it('smoke-tests a route with --verify-status, --fail-on-php-error, --headers, --output, and --json', async () => {
+    const tmp = createTempDir('e2e-fetch-');
+    try {
+      const siteDir = join(tmp.dir, 'site');
+      mkdirSync(siteDir, { recursive: true });
+      createMockJoomlaSite(siteDir);
+      writeFileSync(
+        join(siteDir, 'php-warning.php'),
+        '<?php echo "Warning: simulated failure in /var/www/html/php-warning.php on line 1";',
+        'utf8'
+      );
+
+      const outFile = join(tmp.dir, 'home.json');
+      const okRes = await runCliProcess([
+        'fetch',
+        '/',
+        '--joomla',
+        `--site=${siteDir}`,
+        '--headers',
+        `--output=${outFile}`,
+        '--verify-status=200',
+        '--fail-on-php-error',
+        '--json',
+      ]);
+
+      assert.equal(okRes.exitCode, 0, okRes.stderr);
+      const payload = JSON.parse(okRes.stdout.trim());
+      assert.equal(payload.data.status, 200);
+      assert.equal(payload.data.path, '/');
+      assert.equal(payload.data.output, outFile);
+      assert.ok(payload.data.bytes > 0);
+      assert.ok(payload.data.headers);
+      assert.deepEqual(payload.data.phpErrors, []);
+      assert.equal(JSON.parse(readFileSync(outFile, 'utf8')).cms, 'joomla-fixture');
+
+      // Status mismatch must fail non-zero with fetch_status_mismatch.
+      const mismatchRes = await runCliProcess([
+        'fetch',
+        '/administrator/missing',
+        '--joomla',
+        `--site=${siteDir}`,
+        '--verify-status=200',
+        '--json',
+      ]);
+      assert.notEqual(mismatchRes.exitCode, 0);
+      assert.equal(JSON.parse(mismatchRes.stderr.trim()).error.code, 'fetch_status_mismatch');
+
+      // PHP error in body must fail non-zero when --fail-on-php-error is set.
+      const phpErrRes = await runCliProcess([
+        'fetch',
+        '/php-warning.php',
+        '--joomla',
+        `--site=${siteDir}`,
+        '--verify-status=200',
+        '--fail-on-php-error',
+        '--json',
+      ]);
+      assert.notEqual(phpErrRes.exitCode, 0);
+      assert.equal(JSON.parse(phpErrRes.stderr.trim()).error.code, 'php_error_detected');
+    } finally {
+      tmp.cleanup();
+    }
+  });
+});
