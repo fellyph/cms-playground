@@ -97,6 +97,15 @@ export function buildCliMap() {
       ],
     },
     {
+      id: 'mcp',
+      usage: 'cms-playground mcp [--cwd=<path>]',
+      description: 'Start a local stdio MCP server for coding agents',
+      flags: [
+        { name: '--cwd', value: '<path>', description: 'Resolve relative paths from <path>' },
+        { name: '--help', aliases: ['-h'], value: null, description: 'Show help message' },
+      ],
+    },
+    {
       id: 'list',
       usage: 'cms-playground list [--json]',
       description: 'Show registered CMS adapters and supported PHP versions',
@@ -180,6 +189,7 @@ export function buildCliPaths(map = buildCliMap()) {
   }
 
   paths.push('cms-playground setup agent');
+  paths.push('cms-playground mcp');
   paths.push('cms-playground list');
   paths.push('cms-playground map');
   paths.push('cms-playground map --json');
