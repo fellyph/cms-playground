@@ -98,10 +98,28 @@ export function buildCliMap() {
       ],
     },
     {
+      id: 'agents init',
+      usage: 'cms-playground agents init [--cwd=<path>] [--dry-run] [--json]',
+      description: 'Scaffold or idempotently update the @cms-playground guidance block in AGENTS.md',
+      flags: [
+        { name: '--dry-run', value: null, description: 'Preview planned AGENTS.md changes without writing' },
+        ...GLOBAL_FLAGS,
+      ],
+    },
+    {
       id: 'cache',
       usage: 'cms-playground cache <path|ls|clear> [--<cms>] [--json]',
       description: 'Inspect or clear the local CMS bundle cache (path, ls, clear)',
       flags: [...cmsFlags, ...GLOBAL_FLAGS],
+    },
+    {
+      id: 'mcp',
+      usage: 'cms-playground mcp [--cwd=<path>]',
+      description: 'Start a local stdio MCP server for coding agents',
+      flags: [
+        { name: '--cwd', value: '<path>', description: 'Resolve relative paths from <path>' },
+        { name: '--help', aliases: ['-h'], value: null, description: 'Show help message' },
+      ],
     },
     {
       id: 'list',
@@ -187,9 +205,11 @@ export function buildCliPaths(map = buildCliMap()) {
   }
 
   paths.push('cms-playground setup agent');
+  paths.push('cms-playground agents init');
   paths.push('cms-playground cache path');
   paths.push('cms-playground cache ls');
   paths.push('cms-playground cache clear');
+  paths.push('cms-playground mcp');
   paths.push('cms-playground list');
   paths.push('cms-playground map');
   paths.push('cms-playground map --json');

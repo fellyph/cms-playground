@@ -159,7 +159,9 @@ npx @cms-playground/cli cli --joomla --site=./my-joomla-site -- cache:clean
 | `build-snapshot` | Boot a CMS, optionally run a Blueprint, and export a `.zip` snapshot |
 | `cli` | Run the CMS's native CLI (e.g. `cli/joomla.php`) in PHP-WASM |
 | `setup agent` | Install the bundled Agent Skill and configure MCP for supported coding agents |
+| `agents init` | Scaffold or idempotently update the `@cms-playground` guidance block in `AGENTS.md` |
 | `cache` | Inspect or clear the local CMS bundle cache (`path`, `ls`, `clear`) |
+| `mcp` | Start a local stdio MCP server for coding agents |
 | `list` | Show registered CMS adapters and supported PHP versions |
 | `map` | Output a machine-readable catalog of commands, adapters, and Blueprint steps |
 
@@ -233,6 +235,13 @@ npx @cms-playground/cli setup agent -y --project
 
 # Install skill only for a specific client
 npx @cms-playground/cli setup agent --agent cursor --skip-mcp
+
+# Start the local stdio MCP server directly
+npx @cms-playground/cli mcp
+
+# Scaffold or update the @cms-playground block in AGENTS.md
+npx @cms-playground/cli agents init
+npx @cms-playground/cli agents init --dry-run --json
 ```
 
 ---
