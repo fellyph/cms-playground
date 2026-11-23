@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
   rmSync,
+  statSync,
   symlinkSync,
   writeFileSync,
 } from 'node:fs';
@@ -251,17 +253,80 @@ describe('@cms-playground/cli setup-agent', () => {
     );
   });
 
-  it('parses JSONC with URLs inside strings intact', () => {
+  it('parses JSONC with URLs, BOM, and trailing-comma-like substrings inside strings intact', () => {
     const parsed = parseJsonc(
-      `{
+      `\uFEFF{
   // comment
   "url": "https://example.com/a//b",
+  "regex": "a,}b,]c",
+  "escaped": "quote \\",} still string",
   /* block comment */
+  "arr": [1, 2,],
   "ok": true,
 }`,
       'test.json'
     );
 
-    assert.deepEqual(parsed, { url: 'https://example.com/a//b', ok: true });
+    assert.deepEqual(parsed, {
+      url: 'https://example.com/a//b',
+      regex: 'a,}b,]c',
+      escaped: 'quote ",} still string',
+      arr: [1, 2],
+      ok: true,
+    });
+  });
+
+  it('refuses symlinked parent directories for skill and MCP paths', async (t) => {
+    const { root, homeDir, projectDir } = makeTempEnv();
+    const outsideDir = join(root, 'outside');
+    mkdirSync(outsideDir, { recursive: true });
+    try {
+      symlinkSync(outsideDir, join(projectDir, '.cursor'), 'dir');
+    } catch (error) {
+      if (process.platform === 'win32' && error?.code === 'EPERM') {
+        t.skip('Creating directory symlinks requires Developer Mode or elevated privileges on Windows');
+        return;
+      }
+      throw error;
+    }
+
+    await assert.rejects(
+      () =>
+        setupAgent({
+          agents: ['cursor'],
+          project: true,
+          yes: true,
+          homeDir,
+          projectDir,
+          isInteractive: false,
+          log: () => {},
+        }),
+      /Refusing symbolic link or non-directory/
+    );
+  });
+
+  it('preserves existing file permissions when updating an MCP config', async (t) => {
+    if (process.platform === 'win32') {
+      t.skip('POSIX file permission bits are not enforced on Windows');
+      return;
+    }
+
+    const { homeDir, projectDir } = makeTempEnv();
+    const mcpPath = join(projectDir, '.mcp.json');
+    writeFileSync(mcpPath, '{"mcpServers":{}}\n', { encoding: 'utf8', mode: 0o600 });
+    chmodSync(mcpPath, 0o600);
+
+    await setupAgent({
+      agents: ['claude-code'],
+      project: true,
+      yes: true,
+      homeDir,
+      projectDir,
+      isInteractive: false,
+      log: () => {},
+    });
+
+    const mode = statSync(mcpPath).mode & 0o777;
+    assert.equal(mode, 0o600);
   });
 });
