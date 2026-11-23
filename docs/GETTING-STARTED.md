@@ -6,8 +6,14 @@
 
 ## Requirements
 
-- **Node.js 22+** and **npm**
+- **Node.js 24.18+** and **npm 11.16+**
 - Internet access on first run to download and cache the CMS bundle (subsequent runs reuse the local cache)
+
+## Run from npm
+
+```bash
+npx @cms-playground/cli list
+```
 
 ## Installation (from source)
 
@@ -17,7 +23,7 @@ cd cms-playground
 npm install
 ```
 
-Once installed, run the CLI via `npx cms-playground` (or `node packages/cli/bin/cms-playground.mjs`).
+Run the CLI from this checkout with `node packages/cli/bin/cms-playground.mjs list`.
 
 ---
 
@@ -26,14 +32,14 @@ Once installed, run the CLI via `npx cms-playground` (or `node packages/cli/bin/
 ### List registered CMS adapters
 
 ```bash
-npx cms-playground list
+npx @cms-playground/cli list
 ```
 
 ### Start a disposable Joomla site
 
 ```bash
-npx cms-playground start --joomla
-npx cms-playground start --joomla=5.4 --php=8.3 --port=8790
+npx @cms-playground/cli start --joomla
+npx @cms-playground/cli start --joomla=5.4 --php=8.3 --port=8790
 ```
 
 When startup finishes, the CLI prints:
@@ -44,14 +50,14 @@ When startup finishes, the CLI prints:
 ### Start a disposable WordPress site
 
 ```bash
-npx cms-playground start --wp
-npx cms-playground start --wp=6.7 --php=8.4 --port=8791
+npx @cms-playground/cli start --wp
+npx @cms-playground/cli start --wp=6.7 --php=8.4 --port=8791
 ```
 
 `--wordpress` is also accepted as an alias for `--wp`:
 
 ```bash
-npx cms-playground start --wordpress=6.7 --port=8792
+npx @cms-playground/cli start --wordpress=6.7 --port=8792
 ```
 
 ### Auto-mount a local extension, plugin, or theme
@@ -62,9 +68,9 @@ Use `--auto-mount` (defaults to the current working directory) or `--auto-mount=
 - **WordPress:** detects a theme (`style.css`), plugin (`Plugin Name:` header), or `wp-content/` folder, mounts it into `wp-content/`, and switches the theme or activates the plugin.
 
 ```bash
-npx cms-playground start --joomla --auto-mount
-npx cms-playground start --joomla --auto-mount=./my-joomla-plugin
-npx cms-playground start --wp --auto-mount=./my-wp-plugin
+npx @cms-playground/cli start --joomla --auto-mount
+npx @cms-playground/cli start --joomla --auto-mount=./my-joomla-plugin
+npx @cms-playground/cli start --wp --auto-mount=./my-wp-plugin
 ```
 
 ### Mount local folders explicitly
@@ -72,9 +78,9 @@ npx cms-playground start --wp --auto-mount=./my-wp-plugin
 Use `--mount=<hostPath>:<vfsPath>` (mounted after CMS configuration) or `--mount-before-install=<hostPath>:<vfsPath>` (mounted before CMS configuration, e.g. for custom DB drop-ins or config overlays). Both flags are repeatable:
 
 ```bash
-npx cms-playground start --joomla --mount=./my-plugin:/var/www/html/plugins/system/myplugin
-npx cms-playground start --wp --mount=./my-plugin:/var/www/html/wp-content/plugins/my-plugin
-npx cms-playground start --joomla --mount-before-install=./overlay:/var/www/html/overlay
+npx @cms-playground/cli start --joomla --mount=./my-plugin:/var/www/html/plugins/system/myplugin
+npx @cms-playground/cli start --wp --mount=./my-plugin:/var/www/html/wp-content/plugins/my-plugin
+npx @cms-playground/cli start --joomla --mount-before-install=./overlay:/var/www/html/overlay
 ```
 
 ### Use an existing local site directory
@@ -82,7 +88,7 @@ npx cms-playground start --joomla --mount-before-install=./overlay:/var/www/html
 Use `--site=<dir>` to mount a persistent local directory instead of unpacking an ephemeral bundle into memory:
 
 ```bash
-npx cms-playground start --joomla --site=./my-joomla-site --port=8790
+npx @cms-playground/cli start --joomla --site=./my-joomla-site --port=8790
 ```
 
 ### Run a Blueprint (server or headless)
@@ -91,11 +97,11 @@ Pass a local JSON file or remote URL with `--blueprint`:
 
 ```bash
 # Start a server after running a Blueprint
-npx cms-playground start --joomla --blueprint=./blueprint.json
-npx cms-playground start --wp --blueprint=https://example.org/blueprint.json
+npx @cms-playground/cli start --joomla --blueprint=./blueprint.json
+npx @cms-playground/cli start --wp --blueprint=https://example.org/blueprint.json
 
 # Run a Blueprint headlessly (no HTTP server — ideal for CI)
-npx cms-playground run-blueprint --joomla --blueprint=./blueprint.json --verbosity=debug
+npx @cms-playground/cli run-blueprint --joomla --blueprint=./blueprint.json --verbosity=debug
 ```
 
 See [Blueprints](BLUEPRINTS.md) for all supported steps and examples.
@@ -105,8 +111,8 @@ See [Blueprints](BLUEPRINTS.md) for all supported steps and examples.
 Use `build-snapshot` to boot a CMS, optionally run a Blueprint, and export `/var/www/html` as a `.zip` archive:
 
 ```bash
-npx cms-playground build-snapshot --joomla --blueprint=./blueprint.json --output=./snapshot.zip
-npx cms-playground build-snapshot --wp --output=./wp-snapshot.zip --verbosity=quiet
+npx @cms-playground/cli build-snapshot --joomla --blueprint=./blueprint.json --output=./snapshot.zip
+npx @cms-playground/cli build-snapshot --wp --output=./wp-snapshot.zip --verbosity=quiet
 ```
 
 ### Run Joomla's native CLI (`cli/joomla.php`)
@@ -114,8 +120,8 @@ npx cms-playground build-snapshot --wp --output=./wp-snapshot.zip --verbosity=qu
 Pass arguments after `--` to forward them to `cli/joomla.php` inside PHP-WASM:
 
 ```bash
-npx cms-playground cli --joomla -- user:list
-npx cms-playground cli --joomla --site=./my-joomla-site -- cache:clean
+npx @cms-playground/cli cli --joomla -- user:list
+npx @cms-playground/cli cli --joomla --site=./my-joomla-site -- cache:clean
 ```
 
 ---
@@ -168,11 +174,11 @@ npx cms-playground cli --joomla --site=./my-joomla-site -- cache:clean
 Pass `--json` (or set `CMS_PLAYGROUND_AGENT=1` / `CI=1`) to enable agent mode: `stdout` receives a single `{ "data": ... }` JSON receipt, `stderr` receives structured `{ "error": { code, message, retryable, recovery, suggestions, pointer? } }` objects on failure, interactive prompts are disabled, and ANSI colors are suppressed.
 
 ```bash
-npx cms-playground list --json
-npx cms-playground map --json
-npx cms-playground map --paths
-npx cms-playground start --joomla --port=0 --json
-npx cms-playground run-blueprint --wp --cwd=./my-site --site=. --blueprint=./blueprint.json --json
+npx @cms-playground/cli list --json
+npx @cms-playground/cli map --json
+npx @cms-playground/cli map --paths
+npx @cms-playground/cli start --joomla --port=0 --json
+npx @cms-playground/cli run-blueprint --wp --cwd=./my-site --site=. --blueprint=./blueprint.json --json
 ```
 
 | Exit Code | Meaning |
@@ -194,13 +200,13 @@ Install the bundled `cms-playground` Agent Skill and configure MCP for detected 
 
 ```bash
 # Preview changes without writing files
-npx cms-playground setup agent --dry-run
+npx @cms-playground/cli setup agent --dry-run
 
 # Auto-detect clients and install into the current project
-npx cms-playground setup agent -y --project
+npx @cms-playground/cli setup agent -y --project
 
 # Install skill only for a specific client
-npx cms-playground setup agent --agent cursor --skip-mcp
+npx @cms-playground/cli setup agent --agent cursor --skip-mcp
 ```
 
 ---

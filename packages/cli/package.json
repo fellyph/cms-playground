@@ -6,17 +6,19 @@
   "type": "module",
   "files": [
     "bin",
-    "src"
+    "src",
+    "skills"
   ],
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=24.18.0",
+    "npm": ">=11.16.0"
   },
   "publishConfig": {
     "access": "public"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/fellyph/cms-playground.git",
+    "url": "git+https://github.com/fellyph/cms-playground.git",
     "directory": "packages/cli"
   },
   "bugs": {
@@ -24,7 +26,7 @@
   },
   "homepage": "https://github.com/fellyph/cms-playground#readme",
   "bin": {
-    "cms-playground": "./bin/cms-playground.mjs"
+    "cms-playground": "bin/cms-playground.mjs"
   },
   "exports": {
     ".": "./src/cli.js"

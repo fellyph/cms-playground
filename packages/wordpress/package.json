@@ -8,14 +8,15 @@
     "src"
   ],
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=24.18.0",
+    "npm": ">=11.16.0"
   },
   "publishConfig": {
     "access": "public"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/fellyph/cms-playground.git",
+    "url": "git+https://github.com/fellyph/cms-playground.git",
     "directory": "packages/wordpress"
   },
   "bugs": {

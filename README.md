@@ -6,38 +6,38 @@ Run **Joomla**, **WordPress**, and other PHP CMSs locally in WebAssembly (`@php-
 
 ```bash
 # Start a disposable Joomla site (downloads & caches bundle automatically)
-npx cms-playground start --joomla
-npx cms-playground start --joomla=5.4 --php=8.3 --port=8790
+npx @cms-playground/cli start --joomla
+npx @cms-playground/cli start --joomla=5.4 --php=8.3 --port=8790
 
 # Start a disposable WordPress site (SQLite-backed)
-npx cms-playground start --wp
-npx cms-playground start --wp=6.7 --php=8.4 --port=8791
+npx @cms-playground/cli start --wp
+npx @cms-playground/cli start --wp=6.7 --php=8.4 --port=8791
 
 # Auto-detect and mount a local Joomla extension or WordPress plugin/theme
-npx cms-playground start --joomla --auto-mount
-npx cms-playground start --wp --auto-mount=./my-plugin
+npx @cms-playground/cli start --joomla --auto-mount
+npx @cms-playground/cli start --wp --auto-mount=./my-plugin
 
 # Mount local folders explicitly (before or after CMS configure)
-npx cms-playground start --joomla --mount=./my-plugin:/var/www/html/plugins/system/myplugin
-npx cms-playground start --joomla --mount-before-install=./overlay:/var/www/html/overlay
+npx @cms-playground/cli start --joomla --mount=./my-plugin:/var/www/html/plugins/system/myplugin
+npx @cms-playground/cli start --joomla --mount-before-install=./overlay:/var/www/html/overlay
 
 # Run a Blueprint (interactive, headless, or export as a .zip snapshot)
-npx cms-playground start --joomla --blueprint=./blueprint.json
-npx cms-playground run-blueprint --joomla --blueprint=./blueprint.json
-npx cms-playground build-snapshot --joomla --blueprint=./blueprint.json --output=./snapshot.zip
+npx @cms-playground/cli start --joomla --blueprint=./blueprint.json
+npx @cms-playground/cli run-blueprint --joomla --blueprint=./blueprint.json
+npx @cms-playground/cli build-snapshot --joomla --blueprint=./blueprint.json --output=./snapshot.zip
 
 # Persist a local site directory, bind a custom host, or control log verbosity
-npx cms-playground start --joomla --site=./my-site --host=127.0.0.1 --verbosity=debug
-npx cms-playground run-blueprint --wp --blueprint=./blueprint.json --quiet
+npx @cms-playground/cli start --joomla --site=./my-site --host=127.0.0.1 --verbosity=debug
+npx @cms-playground/cli run-blueprint --wp --blueprint=./blueprint.json --quiet
 
 # Run Joomla's own CLI (cli/joomla.php) without local PHP
-npx cms-playground cli --joomla -- user:list
+npx @cms-playground/cli cli --joomla -- user:list
 
 # Install the bundled Agent Skill and configure MCP for coding agents
-npx cms-playground setup agent --dry-run
+npx @cms-playground/cli setup agent --dry-run
 
 # List available CMS adapters
-npx cms-playground list
+npx @cms-playground/cli list
 ```
 
 ## Documentation
@@ -72,3 +72,20 @@ npm run test:e2e
 ```
 
 The test suite verifies all package unit tests, live PHP 8.4 WebAssembly HTTP/Blueprint/snapshot tests, automated documentation tests (`tests/docs.test.mjs`), and end-to-end CLI tests (`tests/e2e/*.e2e.test.mjs`) modeled on `@wp-playground/cli`.
+
+## Publishing the npm workspaces
+
+Use Node.js 24.18+ and npm 11.16+. From the repository root:
+
+```sh
+npm ci
+npm test
+npm run release:preview
+npm run release:publish -- --dry-run
+npm login --registry=https://registry.npmjs.org/
+npm run release:publish
+```
+
+The preview lists every file in each tarball. The publish command releases core, then the adapters, then the CLI to the public npm registry. If publishing stops midway, check each version with `npm view <package>@<version> version --registry=https://registry.npmjs.org/`. Resume with `npm publish -w <package> --access public --registry=https://registry.npmjs.org/` for each remaining workspace in the same order.
+
+For a subsequent patch release, start from the last released revision and run `npm run release:patch` once. This bumps the workspaces, aligns internal dependency pins, and refreshes the lockfile. Review and commit those changes, then repeat the test, preview, and publish steps. From an empty directory, verify the published CLI with `npx @cms-playground/cli list` and `npx @cms-playground/cli start --wp`.
