@@ -152,6 +152,7 @@ npx @cms-playground/cli build-snapshot --joomla --blueprint=./blueprint.json --o
 | Step | Properties | Description |
 |---|---|---|
 | `setSiteName` | `name` | Updates `SYS.sitename` in `typo3conf/system/settings.php` |
+| `runSql` | `sql` | Executes SQL statements against TYPO3's configured SQLite database |
 
 ### Example: TYPO3 Blueprint
 
@@ -165,6 +166,10 @@ npx @cms-playground/cli build-snapshot --joomla --blueprint=./blueprint.json --o
     {
       "step": "setSiteName",
       "name": "My TYPO3 Demo"
+    },
+    {
+      "step": "runSql",
+      "sql": "SELECT COUNT(*) FROM pages;"
     }
   ]
 }

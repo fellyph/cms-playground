@@ -378,6 +378,8 @@ export function detectJoomlaAutoMount(dir) {
       vfsPath = `${DOCUMENT_ROOT}/components/${element}`;
     }
 
+    const clientId = client === 'administrator' ? 1 : 0;
+
     return {
       kind: `joomla-${type}`,
       element,
@@ -421,6 +423,58 @@ export function detectJoomlaAutoMount(dir) {
           }
           `
         );
+
+        // Ensure mounted templates are registered in #__extensions / #__template_styles
+        // and activate site templates as the default frontend style (matching WP --auto-mount).
+        if (type === 'template') {
+          await runPhpCode(
+            php,
+            `
+            $root = ${phpSingleQuote(documentRoot)};
+            $element = ${phpSingleQuote(element)};
+            $clientId = ${clientId};
+            $dbFile = $root . '/data/joomla.sqlite';
+            if (!is_file($dbFile)) {
+                return;
+            }
+            $prefix = 'jos_';
+            $configFile = $root . '/configuration.php';
+            if (is_file($configFile)) {
+                $cfg = file_get_contents($configFile);
+                if (preg_match('/public\\s+\\$dbprefix\\s*=\\s*[\\x27"]([^\\x27"]+)[\\x27"]\\s*;/', $cfg, $m)) {
+                    $prefix = $m[1];
+                }
+            }
+            $db = new PDO('sqlite:' . $dbFile);
+            $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+
+            $stmt = $db->prepare("SELECT COUNT(*) FROM {$prefix}extensions WHERE type = 'template' AND element = ? AND client_id = ?");
+            $stmt->execute([$element, $clientId]);
+            if ((int) $stmt->fetchColumn() === 0) {
+                $manifestCache = json_encode(['name' => $element, 'type' => 'template', 'version' => '1.0.0']);
+                $ins = $db->prepare(
+                    "INSERT INTO {$prefix}extensions (package_id, name, type, element, folder, client_id, enabled, access, protected, locked, manifest_cache, params, custom_data, checked_out, checked_out_time, ordering, state) VALUES (0, ?, 'template', ?, '', ?, 1, 1, 0, 0, ?, '{}', '', NULL, NULL, 0, 0)"
+                );
+                $ins->execute([$element, $element, $clientId, $manifestCache]);
+            }
+
+            $stmt = $db->prepare("SELECT COUNT(*) FROM {$prefix}template_styles WHERE template = ? AND client_id = ?");
+            $stmt->execute([$element, $clientId]);
+            if ((int) $stmt->fetchColumn() === 0) {
+                $ins = $db->prepare(
+                    "INSERT INTO {$prefix}template_styles (template, client_id, home, title, inheritable, parent, params) VALUES (?, ?, '0', ?, 0, '', '{}')"
+                );
+                $ins->execute([$element, $clientId, $element . ' - Default']);
+            }
+
+            if ($clientId === 0) {
+                $db->exec("UPDATE {$prefix}template_styles SET home = '0' WHERE client_id = 0");
+                $upd = $db->prepare("UPDATE {$prefix}template_styles SET home = '1' WHERE client_id = 0 AND template = ?");
+                $upd->execute([$element]);
+            }
+            `
+          );
+        }
       },
     };
   }
