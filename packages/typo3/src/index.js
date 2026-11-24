@@ -65,6 +65,42 @@ const blueprintSteps = {
       `
     );
   },
+
+  async runSql({ sql }, context) {
+    context.php.writeFile('/tmp/typo3-step.sql', String(sql ?? ''));
+    await runPhpCode(
+      context.php,
+      `
+      $sql = file_get_contents('/tmp/typo3-step.sql');
+      unlink('/tmp/typo3-step.sql');
+      $root = ${phpSingleQuote(context.documentRoot)};
+      $candidates = [
+          $root . '/typo3conf/system/settings.php',
+          $root . '/config/system/settings.php',
+      ];
+      $file = null;
+      foreach ($candidates as $candidate) {
+          if (file_exists($candidate)) {
+              $file = $candidate;
+              break;
+          }
+      }
+      if ($file === null) {
+          throw new RuntimeException('TYPO3 settings.php not found');
+      }
+      $settings = require $file;
+      $dbPath = $settings['DB']['Connections']['Default']['path'] ?? null;
+      if (!is_string($dbPath) || $dbPath === '') {
+          throw new RuntimeException('TYPO3 SQLite database path not configured in settings.php');
+      }
+      $db = new PDO('sqlite:' . $dbPath);
+      $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+      if (trim($sql) !== '') {
+          $db->exec($sql);
+      }
+      `
+    );
+  },
 };
 
 export const typo3Adapter = {
@@ -239,6 +275,28 @@ export function detectTypo3AutoMount(dir) {
       kind: 'typo3-extension',
       slug: extKey,
       mounts: [{ hostPath: absDir, vfsPath: `${DOCUMENT_ROOT}/typo3conf/ext/${extKey}` }],
+      async postMount({ php, documentRoot, log }) {
+        log?.(`Activating TYPO3 extension "${extKey}"...`);
+        await runPhpCode(
+          php,
+          `
+          $root = ${phpSingleQuote(documentRoot)};
+          $extKey = ${phpSingleQuote(extKey)};
+          $packageStatesFile = $root . '/typo3conf/PackageStates.php';
+          if (file_exists($packageStatesFile)) {
+              $states = require $packageStatesFile;
+              if (is_array($states) && isset($states['packages']) && is_array($states['packages'])) {
+                  if (!isset($states['packages'][$extKey])) {
+                      $states['packages'][$extKey] = [
+                          'packagePath' => 'typo3conf/ext/' . $extKey . '/',
+                      ];
+                      file_put_contents($packageStatesFile, "<?php\\nreturn " . var_export($states, true) . ";\\n");
+                  }
+              }
+          }
+          `
+        );
+      },
     };
   }
 

@@ -59,6 +59,58 @@ describe('@cms-playground/typo3', () => {
     }
   });
 
+  it('executes SQL against the configured SQLite database via runSql blueprint step', async () => {
+    const php = await bootPhp({ phpVersion: '8.4' });
+    try {
+      php.mkdir('/var/www/html/typo3conf/system');
+      php.writeFile(
+        '/var/www/html/typo3conf/system/settings.php',
+        "<?php\nreturn ['DB' => ['Connections' => ['Default' => ['driver' => 'pdo_sqlite', 'path' => '/var/www/html/typo3conf/cms-test1234.sqlite']]]];\n"
+      );
+
+      await typo3Adapter.blueprintSteps.runSql(
+        { sql: "CREATE TABLE pages (uid INTEGER PRIMARY KEY, title TEXT); INSERT INTO pages (uid, title) VALUES (1, 'Home');" },
+        { php, documentRoot: '/var/www/html' }
+      );
+
+      const res = await php.run({
+        code: "<?php $db = new PDO('sqlite:/var/www/html/typo3conf/cms-test1234.sqlite'); echo $db->query('SELECT title FROM pages WHERE uid = 1')->fetchColumn();",
+      });
+      assert.equal(res.text, 'Home');
+    } finally {
+      php.exit();
+    }
+  });
+
+  it('activates auto-mounted TYPO3 extensions in PackageStates.php via postMount', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'cms-playground-typo3-pm-'));
+    const php = await bootPhp({ phpVersion: '8.4' });
+
+    try {
+      const extDir = join(root, 'my_ext');
+      mkdirSync(extDir);
+      writeFileSync(join(extDir, 'ext_emconf.php'), '<?php $EM_CONF[$_EXTKEY] = [];');
+
+      const res = detectTypo3AutoMount(extDir);
+      assert.equal(typeof res.postMount, 'function');
+
+      php.mkdir('/var/www/html/typo3conf');
+      php.writeFile(
+        '/var/www/html/typo3conf/PackageStates.php',
+        "<?php\nreturn ['packages' => ['core' => ['packagePath' => 'typo3/sysext/core/']], 'version' => 5];\n"
+      );
+
+      await res.postMount({ php, documentRoot: '/var/www/html' });
+
+      const updated = php.readFileAsText('/var/www/html/typo3conf/PackageStates.php');
+      assert.match(updated, /'my_ext'/);
+      assert.match(updated, /typo3conf\/ext\/my_ext\//);
+    } finally {
+      php.exit();
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it('detects TYPO3 extensions via composer.json or ext_emconf.php for --auto-mount', () => {
     const root = mkdtempSync(join(tmpdir(), 'cms-playground-typo3-am-'));
 

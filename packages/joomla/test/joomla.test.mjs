@@ -301,4 +301,22 @@ describe('@cms-playground/joomla', () => {
       php.exit();
     }
   });
+
+  it('detects Joomla site template manifests for --auto-mount with postMount hook', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'joomla-tpl-automount-'));
+
+    try {
+      writeFileSync(
+        join(dir, 'templateDetails.xml'),
+        '<extension type="template" client="site" version="6.0" method="upgrade"><name>my_tpl</name></extension>'
+      );
+      const tpl = detectJoomlaAutoMount(dir);
+      assert.equal(tpl.kind, 'joomla-template');
+      assert.equal(tpl.element, 'my_tpl');
+      assert.equal(tpl.mounts[0].vfsPath, '/var/www/html/templates/my_tpl');
+      assert.equal(typeof tpl.postMount, 'function');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
 });
