@@ -35,6 +35,22 @@ describe('@cms-playground/drupal', () => {
     assert.ok(drupalAdapter.phpExtensions.includes('intl'));
   });
 
+  it('exposes and validates setAdminTheme and setFrontPage blueprint steps', async () => {
+    assert.equal(typeof drupalAdapter.blueprintSteps.setAdminTheme, 'function');
+    assert.equal(typeof drupalAdapter.blueprintSteps.setFrontPage, 'function');
+    assert.deepEqual(drupalAdapter.blueprintStepSchemas.setAdminTheme.requiredFields, ['theme']);
+    assert.deepEqual(drupalAdapter.blueprintStepSchemas.setFrontPage.requiredFields, ['path']);
+
+    await assert.rejects(
+      () => drupalAdapter.blueprintSteps.setAdminTheme({ theme: '../evil' }, {}),
+      /Invalid Drupal theme machine name/
+    );
+    await assert.rejects(
+      () => drupalAdapter.blueprintSteps.setFrontPage({ path: 'node' }, {}),
+      /Invalid Drupal front page path/
+    );
+  });
+
   it('detects Drupal module and theme *.info.yml manifests for --auto-mount', () => {
     const root = mkdtempSync(join(tmpdir(), 'cms-playground-drupal-am-'));
 
