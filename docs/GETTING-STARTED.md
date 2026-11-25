@@ -248,6 +248,25 @@ npx @cms-playground/cli agents init --dry-run --json
 
 ---
 
+## Offline Documentation (`docs`)
+
+Search bundled documentation completely offline with zero network calls:
+
+```bash
+# List available offline topics
+npx @cms-playground/cli docs
+
+# Search across titles, headings, and summaries
+npx @cms-playground/cli docs blueprint
+npx @cms-playground/cli docs drupal admin
+
+# Print a full documentation page by exact slug
+npx @cms-playground/cli docs blueprints
+
+# Dump the full documentation catalog as JSON (ideal for AI agents)
+npx @cms-playground/cli docs --all --json
+```
+
 ## Caching & Environment Variables
 
 Downloaded CMS zips and Joomla static `/media/*` assets are cached locally in `~/.cache/cms-playground/` (or `$XDG_CACHE_HOME/cms-playground/`).
