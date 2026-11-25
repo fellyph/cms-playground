@@ -77,6 +77,43 @@ const blueprintSteps = {
       `
     );
   },
+
+  async setAdminTheme({ theme }, context) {
+    if (!theme || !/^[a-z][a-z0-9_]*$/i.test(String(theme))) {
+      throw new Error(`Invalid Drupal theme machine name "${theme}"`);
+    }
+
+    const themeName = String(theme);
+    await runPhpCode(
+      context.php,
+      `
+      ${drupalBootstrapSnippet(phpSingleQuote(context.documentRoot))}
+      \\Drupal::service('theme_installer')->install([${phpSingleQuote(themeName)}]);
+      \\Drupal::configFactory()->getEditable('system.theme')->set('admin', ${phpSingleQuote(themeName)})->save();
+      \\Drupal::configFactory()->getEditable('node.settings')->set('use_admin_theme', true)->save();
+      drupal_flush_all_caches();
+      `
+    );
+  },
+
+  async setFrontPage({ path }, context) {
+    const frontPath = String(path ?? '').trim();
+    if (!frontPath || !frontPath.startsWith('/')) {
+      throw new Error(`Invalid Drupal front page path "${path}". Expected a path starting with "/".`);
+    }
+
+    context.php.writeFile('/tmp/drupal-frontpage.json', JSON.stringify({ path: frontPath }));
+    await runPhpCode(
+      context.php,
+      `
+      $data = json_decode(file_get_contents('/tmp/drupal-frontpage.json'), true);
+      unlink('/tmp/drupal-frontpage.json');
+      ${drupalBootstrapSnippet(phpSingleQuote(context.documentRoot))}
+      \\Drupal::configFactory()->getEditable('system.site')->set('page.front', $data['path'])->save();
+      drupal_flush_all_caches();
+      `
+    );
+  },
 };
 
 export const drupalAdapter = {
@@ -100,6 +137,16 @@ export const drupalAdapter = {
       requiredFields: ['module'],
       optionalFields: [],
       description: 'Install and enable a Drupal module',
+    },
+    setAdminTheme: {
+      requiredFields: ['theme'],
+      optionalFields: [],
+      description: 'Install and activate a Drupal admin theme (and enable node.settings.use_admin_theme)',
+    },
+    setFrontPage: {
+      requiredFields: ['path'],
+      optionalFields: [],
+      description: 'Set system.site page.front to a path starting with "/"',
     },
   },
 
@@ -214,6 +261,25 @@ export const drupalAdapter = {
                 file_put_contents($settingsFile, $content);
             }
         }
+        `
+      );
+
+      log?.('Configuring Drupal admin UX (Claro, toolbar, frontpage, permissions)...');
+      await runPhpCode(
+        php,
+        `
+        ${drupalBootstrapSnippet(phpSingleQuote(documentRoot))}
+        \\Drupal::service('theme_installer')->install(['claro']);
+        \\Drupal::configFactory()->getEditable('system.theme')->set('admin', 'claro')->save();
+        \\Drupal::service('module_installer')->install(['toolbar', 'views']);
+        \\Drupal::configFactory()->getEditable('node.settings')->set('use_admin_theme', true)->save();
+        \\Drupal::configFactory()->getEditable('system.site')->set('page.front', '/node')->save();
+        $anonRole = \\Drupal\\user\\Entity\\Role::load('anonymous');
+        if ($anonRole && !$anonRole->hasPermission('access content')) {
+            $anonRole->grantPermission('access content');
+            $anonRole->save();
+        }
+        drupal_flush_all_caches();
         `
       );
     }

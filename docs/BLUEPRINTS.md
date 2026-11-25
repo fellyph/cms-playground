@@ -127,6 +127,8 @@ npx @cms-playground/cli build-snapshot --joomla --blueprint=./blueprint.json --o
 |---|---|---|
 | `setSiteName` | `name` | Updates `system.site` `name` config and flushes caches |
 | `enableModule` | `module` | Installs and enables a Drupal module by machine name |
+| `setAdminTheme` | `theme` | Installs and activates an admin theme (`system.theme.admin`) and sets `node.settings.use_admin_theme = true` |
+| `setFrontPage` | `path` | Updates `system.site` `page.front` (path starting with `/`) and flushes caches |
 
 ### Example: Drupal Blueprint
 
