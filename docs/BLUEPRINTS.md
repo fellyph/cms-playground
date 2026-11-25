@@ -51,6 +51,7 @@ npx @cms-playground/cli build-snapshot --joomla --blueprint=./blueprint.json --o
 |---|---|---|
 | `setGlobalConfig` | `values` | Updates properties in `configuration.php` |
 | `runSql` | `sql` | Executes SQL statements against Joomla's database (supports `#__` table prefix) |
+| `createArticle` | `title`, `introtext?`/`content?`, `fulltext?`, `alias?`, `catid?`, `state?`, `featured?`, `fields?` | Creates a `#__content` article with its `#__workflow_associations` row and optional `com_fields` values |
 
 ### Example: Joomla Blueprint
 
@@ -129,6 +130,7 @@ npx @cms-playground/cli build-snapshot --joomla --blueprint=./blueprint.json --o
 | `enableModule` | `module` | Installs and enables a Drupal module by machine name |
 | `setAdminTheme` | `theme` | Installs and activates an admin theme (`system.theme.admin`) and sets `node.settings.use_admin_theme = true` |
 | `setFrontPage` | `path` | Updates `system.site` `page.front` (path starting with `/`) and flushes caches |
+| `createNode` | `title`, `type?`, `body?`, `status?`, `promote?`, `setFrontPage?` | Creates a Drupal node entity (auto-creating the content type and `body` field if needed) |
 
 ### Example: Drupal Blueprint
 
@@ -155,6 +157,9 @@ npx @cms-playground/cli build-snapshot --joomla --blueprint=./blueprint.json --o
 |---|---|---|
 | `setSiteName` | `name` | Updates `SYS.sitename` in `typo3conf/system/settings.php` |
 | `runSql` | `sql` | Executes SQL statements against TYPO3's configured SQLite database |
+| `createStarterSite` | `title?`, `siteName?`, `header?`, `bodytext?`, `identifier?` | Seeds a root page (`is_siteroot = 1`), `typo3conf/sites/<id>/config.yaml`, root TypoScript template, and optional `tt_content` record so `/` renders |
+| `createPage` | `title`, `pid?`, `slug?`, `doktype?`, `isSiteroot?` | Inserts a page record into TYPO3's `pages` table |
+| `createContent` | `header`, `bodytext?`, `pid?`, `ctype?`, `colPos?` | Inserts a content element into TYPO3's `tt_content` table |
 
 ### Example: TYPO3 Blueprint
 
@@ -208,3 +213,9 @@ npx @cms-playground/cli build-snapshot --joomla --blueprint=./blueprint.json --o
   ]
 }
 ```
+
+---
+
+## CMS-Specific Pitfalls & Admin Content Recipes
+
+For CMS-specific gotchas when seeding Admin-editable content (Joomla `#__workflow_associations` and `com_fields`, Drupal `page.front` and `EntityFormDisplay` widgets, TYPO3 randomized SQLite paths and password policy, WordPress `show_in_rest` post meta), see [CMS-Specific Pitfalls & Admin Content Recipes](../packages/cli/skills/cms-playground/references/blueprints.md#cms-specific-pitfalls--admin-content-recipes) in the bundled agent skill reference.

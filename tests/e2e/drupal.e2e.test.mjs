@@ -67,7 +67,7 @@ describe('Drupal live E2E', () => {
     }
   });
 
-  it('applies a Drupal Blueprint (setSiteName, setAdminTheme, setFrontPage) and serves the updated config', async () => {
+  it('applies a Drupal Blueprint (setSiteName, setAdminTheme, createNode) and serves the updated config', async () => {
     const tmp = createTempDir('e2e-drupal-live-bp-');
     try {
       const bpPath = join(tmp.dir, 'blueprint.json');
@@ -77,7 +77,12 @@ describe('Drupal live E2E', () => {
           steps: [
             { step: 'setSiteName', name: 'Drupal E2E Blueprint Site' },
             { step: 'setAdminTheme', theme: 'claro' },
-            { step: 'setFrontPage', path: '/user/login' },
+            {
+              step: 'createNode',
+              title: 'Drupal Blueprint Welcome',
+              body: 'Seeded cleanly via createNode!',
+              setFrontPage: true,
+            },
           ],
         })
       );
@@ -93,7 +98,8 @@ describe('Drupal live E2E', () => {
         assert.equal(homeRes.status, 200);
         const homeHtml = await homeRes.text();
         assert.match(homeHtml, /Drupal E2E Blueprint Site/);
-        assert.match(homeHtml, /user-login-form/);
+        assert.match(homeHtml, /Drupal Blueprint Welcome/);
+        assert.match(homeHtml, /Seeded cleanly via createNode!/);
       } finally {
         const exit = await server.stop('SIGTERM');
         assert.equal(exit.code, 0);

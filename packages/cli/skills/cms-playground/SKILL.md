@@ -75,4 +75,4 @@ cms-playground cli --joomla --site=./my-joomla-site -- cache:clean
 - Use `--verbosity=quiet` (or `--quiet`) when you only need clean command output, and `--verbosity=debug` when diagnosing boot or Blueprint issues.
 - Use `--port=0` (or pick a distinct `--port`) if port `8790` is already in use by another instance.
 - Bundles are cached automatically under `~/.cache/cms-playground` (override with `CMS_PLAYGROUND_CACHE_DIR`).
-- For Blueprint JSON schemas and CMS-specific steps, read `references/blueprints.md`.
+- For Blueprint JSON schemas, CMS-specific steps, and Admin content pitfalls/recipes across Joomla, Drupal, TYPO3, and WordPress, read [references/blueprints.md](references/blueprints.md).
