@@ -33,6 +33,32 @@ export function typo3DownloadUrl(version) {
   return `https://get.typo3.org/${resolved}/zip`;
 }
 
+/**
+ * Ensures a password satisfies TYPO3 13's default PasswordPolicyValidator
+ * (minimum 8 chars, lowercase, uppercase, digit, and special character).
+ */
+export function ensureTypo3Password(password) {
+  let out = String(password ?? '');
+
+  if (!/[a-z]/.test(out)) {
+    out += 'a';
+  }
+  if (!/[A-Z]/.test(out)) {
+    out += 'A';
+  }
+  if (!/[0-9]/.test(out)) {
+    out += '9';
+  }
+  if (!/[^A-Za-z0-9]/.test(out)) {
+    out += '!';
+  }
+  while (out.length < 8) {
+    out += 'x';
+  }
+
+  return out;
+}
+
 const blueprintSteps = {
   async setSiteName({ name }, context) {
     context.php.writeFile('/tmp/typo3-sitename.json', JSON.stringify({ name: String(name ?? '') }));
@@ -149,6 +175,8 @@ export const typo3Adapter = {
       }
     }
 
+    const effectivePassword = site ? '(unchanged)' : ensureTypo3Password(password);
+
     const settingsExists =
       php.fileExists(`${documentRoot}/typo3conf/system/settings.php`) ||
       php.fileExists(`${documentRoot}/config/system/settings.php`);
@@ -157,7 +185,7 @@ export const typo3Adapter = {
       log?.('Running TYPO3 SQLite setup...');
       php.writeFile(
         '/tmp/typo3-setup.json',
-        JSON.stringify({ root: documentRoot, url, password })
+        JSON.stringify({ root: documentRoot, url, password: effectivePassword })
       );
       await runPhpCode(
         php,
@@ -203,12 +231,24 @@ export const typo3Adapter = {
         `
       );
 
-      // SetupCommand can end its PHP request. Configure host validation in a fresh one.
+      // SetupCommand can end its PHP request. Configure host validation and verify the admin user in a fresh one.
+      php.writeFile(
+        '/tmp/typo3-post-setup.json',
+        JSON.stringify({
+          root: documentRoot,
+          host: new URL(url).hostname,
+          password: effectivePassword,
+        })
+      );
       await runPhpCode(php, `
-        $root = ${phpSingleQuote(documentRoot)};
-        $host = base64_decode('${Buffer.from(new URL(url).hostname).toString('base64')}');
+        $cfg = json_decode(file_get_contents('/tmp/typo3-post-setup.json'), true);
+        unlink('/tmp/typo3-post-setup.json');
+        $root = $cfg['root'];
+        $host = $cfg['host'];
+        $adminPassword = $cfg['password'];
         $hosts = array_unique(['localhost', '127.0.0.1', '[::1]', $host]);
         $trustedHosts = array_map(static fn ($name) => preg_quote($name, '/'), $hosts);
+        $settings = null;
         foreach ([$root . '/typo3conf/system/settings.php', $root . '/config/system/settings.php'] as $file) {
             if (is_file($file)) {
                 $settings = require $file;
@@ -217,12 +257,36 @@ export const typo3Adapter = {
                 break;
             }
         }
+
+        $dbPath = is_array($settings) ? ($settings['DB']['Connections']['Default']['path'] ?? null) : null;
+        if (is_string($dbPath) && $dbPath !== '' && is_file($dbPath)) {
+            $db = new PDO('sqlite:' . $dbPath);
+            $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+            $count = (int) $db->query("SELECT COUNT(*) FROM be_users WHERE username = 'admin' AND deleted = 0")->fetchColumn();
+            if ($count === 0) {
+                require_once $root . '/vendor/autoload.php';
+                $hasher = new \\TYPO3\\CMS\\Core\\Crypto\\PasswordHashing\\BcryptPasswordHash();
+                $hash = $hasher->getHashedPassword($adminPassword);
+                $now = time();
+                $stmt = $db->prepare(
+                    'INSERT INTO be_users (pid, tstamp, crdate, username, password, admin, disable, deleted, email, realName) '
+                    . 'VALUES (0, :now, :now, :username, :password, 1, 0, 0, :email, :realName)'
+                );
+                $stmt->execute([
+                    ':now' => $now,
+                    ':username' => 'admin',
+                    ':password' => $hash,
+                    ':email' => 'admin@example.com',
+                    ':realName' => 'Admin',
+                ]);
+            }
+        }
       `);
     }
 
     return {
       username: 'admin',
-      password: site ? '(unchanged)' : password,
+      password: effectivePassword,
     };
   },
 

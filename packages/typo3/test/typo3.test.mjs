@@ -6,6 +6,7 @@ import { describe, it } from 'node:test';
 import { bootPhp } from '@cms-playground/core';
 import {
   detectTypo3AutoMount,
+  ensureTypo3Password,
   typo3Adapter,
   typo3DownloadUrl,
   validateTypo3Version,
@@ -36,6 +37,25 @@ describe('@cms-playground/typo3', () => {
   it('requests the intl PHP extension and exposes the TYPO3 CLI entrypoint', () => {
     assert.ok(typo3Adapter.phpExtensions.includes('intl'));
     assert.equal(typo3Adapter.cliEntrypoint, 'typo3/sysext/core/bin/typo3');
+  });
+
+  it('ensures generated passwords satisfy TYPO3 13 password policy', () => {
+    const fromAlnum = ensureTypo3Password('Abcdef123456');
+    assert.ok(fromAlnum.length >= 8);
+    assert.match(fromAlnum, /[a-z]/);
+    assert.match(fromAlnum, /[A-Z]/);
+    assert.match(fromAlnum, /[0-9]/);
+    assert.match(fromAlnum, /[^A-Za-z0-9]/);
+
+    const fromShortLower = ensureTypo3Password('abc');
+    assert.ok(fromShortLower.length >= 8);
+    assert.match(fromShortLower, /[a-z]/);
+    assert.match(fromShortLower, /[A-Z]/);
+    assert.match(fromShortLower, /[0-9]/);
+    assert.match(fromShortLower, /[^A-Za-z0-9]/);
+
+    const alreadyValid = 'Str0ng!Pass';
+    assert.equal(ensureTypo3Password(alreadyValid), alreadyValid);
   });
 
   it('updates TYPO3 sitename via setSiteName blueprint step', async () => {
