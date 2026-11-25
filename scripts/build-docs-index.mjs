@@ -86,7 +86,7 @@ export function buildDocsIndex(rootDir = ROOT) {
 
   const topics = files.map((file) => {
     const fullPath = join(docsDir, file);
-    const content = readFileSync(fullPath, 'utf8');
+    const content = readFileSync(fullPath, 'utf8').replace(/\r\n/g, '\n');
     const slug = toSlug(file);
 
     return {
