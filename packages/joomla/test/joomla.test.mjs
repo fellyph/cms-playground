@@ -319,4 +319,78 @@ describe('@cms-playground/joomla', () => {
       rmSync(dir, { recursive: true, force: true });
     }
   });
+
+  it('creates an article with workflow_associations, frontpage, and com_fields via createArticle', async () => {
+    const php = await bootPhp({ phpVersion: '8.4' });
+    const documentRoot = '/var/www/html';
+
+    try {
+      php.mkdir(`${documentRoot}/data`);
+      php.writeFile(
+        `${documentRoot}/configuration.php`,
+        "<?php\nclass JConfig {\n\tpublic $dbprefix = 'jos_';\n}\n"
+      );
+
+      await runPhpCode(
+        php,
+        `
+        $db = new PDO('sqlite:${documentRoot}/data/joomla.sqlite');
+        $db->exec("CREATE TABLE jos_categories (id INTEGER PRIMARY KEY, extension TEXT)");
+        $db->exec("INSERT INTO jos_categories (id, extension) VALUES (2, 'com_content')");
+        $db->exec("CREATE TABLE jos_users (id INTEGER PRIMARY KEY, username TEXT)");
+        $db->exec("INSERT INTO jos_users (id, username) VALUES (42, 'admin')");
+        $db->exec("CREATE TABLE jos_content (id INTEGER PRIMARY KEY AUTOINCREMENT, asset_id INTEGER, title TEXT, alias TEXT, introtext TEXT, fulltext TEXT, state INTEGER, catid INTEGER, created TEXT, created_by INTEGER, created_by_alias TEXT, modified TEXT, modified_by INTEGER, publish_up TEXT, images TEXT, urls TEXT, attribs TEXT, version INTEGER, ordering INTEGER, metakey TEXT, metadesc TEXT, access INTEGER, hits INTEGER, metadata TEXT, featured INTEGER, language TEXT, note TEXT)");
+        $db->exec("CREATE TABLE jos_workflow_associations (item_id INTEGER, stage_id INTEGER, extension TEXT, PRIMARY KEY (item_id, extension))");
+        $db->exec("CREATE TABLE jos_content_frontpage (content_id INTEGER PRIMARY KEY, ordering INTEGER)");
+        $db->exec("CREATE TABLE jos_fields (id INTEGER PRIMARY KEY AUTOINCREMENT, asset_id INTEGER, context TEXT, group_id INTEGER, title TEXT, name TEXT, label TEXT, default_value TEXT, type TEXT, note TEXT, description TEXT, state INTEGER, required INTEGER, only_use_in_subform INTEGER, ordering INTEGER, params TEXT, fieldparams TEXT, language TEXT, created_time TEXT, created_user_id INTEGER, modified_time TEXT, modified_by INTEGER, access INTEGER)");
+        $db->exec("CREATE TABLE jos_fields_values (field_id INTEGER, item_id TEXT, value TEXT)");
+        `
+      );
+
+      await joomlaAdapter.blueprintSteps.createArticle(
+        {
+          title: 'Hello Joomla!',
+          introtext: '<p>Seeded via Blueprint</p>',
+          featured: true,
+          fields: { role: 'Lead Architect' },
+        },
+        { php, documentRoot }
+      );
+
+      const res = await runPhpCode(
+        php,
+        `
+        $db = new PDO('sqlite:${documentRoot}/data/joomla.sqlite');
+        echo json_encode([
+            'content' => $db->query('SELECT id, title, alias, catid, created_by, state, featured FROM jos_content')->fetchAll(PDO::FETCH_ASSOC),
+            'workflow' => $db->query('SELECT item_id, stage_id, extension FROM jos_workflow_associations')->fetchAll(PDO::FETCH_ASSOC),
+            'frontpage' => $db->query('SELECT content_id FROM jos_content_frontpage')->fetchAll(PDO::FETCH_ASSOC),
+            'fields' => $db->query('SELECT f.name, v.item_id, v.value FROM jos_fields f JOIN jos_fields_values v ON f.id = v.field_id')->fetchAll(PDO::FETCH_ASSOC),
+        ]);
+        `
+      );
+
+      const data = JSON.parse(res.text);
+      assert.equal(data.content.length, 1);
+      assert.equal(data.content[0].title, 'Hello Joomla!');
+      assert.equal(data.content[0].alias, 'hello-joomla');
+      assert.equal(Number(data.content[0].catid), 2);
+      assert.equal(Number(data.content[0].created_by), 42);
+      assert.equal(Number(data.content[0].featured), 1);
+      assert.deepEqual(data.workflow, [
+        { item_id: data.content[0].id, stage_id: 1, extension: 'com_content.article' },
+      ]);
+      assert.equal(data.frontpage.length, 1);
+      assert.deepEqual(data.fields, [
+        { name: 'role', item_id: String(data.content[0].id), value: 'Lead Architect' },
+      ]);
+
+      await assert.rejects(
+        () => joomlaAdapter.blueprintSteps.createArticle({ title: '' }, { php, documentRoot }),
+        /non-empty "title"/
+      );
+    } finally {
+      php.exit();
+    }
+  });
 });

@@ -117,6 +117,203 @@ const blueprintSteps = {
       `
     );
   },
+
+  async createArticle(
+    {
+      title,
+      alias,
+      introtext,
+      content,
+      fulltext = '',
+      catid,
+      state = 1,
+      featured = 0,
+      access = 1,
+      language = '*',
+      fields,
+    },
+    context
+  ) {
+    if (!title || typeof title !== 'string' || !title.trim()) {
+      throw new Error('Joomla createArticle requires a non-empty "title"');
+    }
+
+    const payload = {
+      title: title.trim(),
+      alias: typeof alias === 'string' && alias.trim() ? alias.trim() : null,
+      introtext: String(introtext ?? content ?? ''),
+      fulltext: String(fulltext ?? ''),
+      catid: catid != null ? Number(catid) : null,
+      state: Number(state ?? 1),
+      featured: featured ? 1 : 0,
+      access: Number(access ?? 1),
+      language: String(language || '*'),
+      fields: fields && typeof fields === 'object' && !Array.isArray(fields) ? fields : null,
+    };
+
+    context.php.writeFile('/tmp/joomla-article.json', JSON.stringify(payload));
+    await runPhpCode(
+      context.php,
+      `
+      $data = json_decode(file_get_contents('/tmp/joomla-article.json'), true);
+      unlink('/tmp/joomla-article.json');
+
+      $root = ${phpSingleQuote(context.documentRoot)};
+      $configFile = $root . '/configuration.php';
+      $dbFile = $root . '/data/joomla.sqlite';
+      if (!is_file($configFile)) {
+          throw new RuntimeException('configuration.php not found in Joomla site root');
+      }
+      if (!is_file($dbFile)) {
+          throw new RuntimeException('Joomla SQLite database not found at ' . $dbFile);
+      }
+
+      $config = file_get_contents($configFile);
+      $dbprefix = 'jos_';
+      if (preg_match('/public\\s+\\$dbprefix\\s*=\\s*[\\x27\\"]([^\\x27\\"]+)[\\x27\\"]\\s*;/', $config, $m)) {
+          $dbprefix = $m[1];
+      }
+      if (!preg_match('/^[a-zA-Z0-9_]+$/', $dbprefix)) {
+          throw new RuntimeException('Invalid Joomla $dbprefix: ' . $dbprefix);
+      }
+
+      $db = new PDO('sqlite:' . $dbFile);
+      $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+
+      $catid = $data['catid'];
+      if ($catid === null || $catid <= 0) {
+          $catRow = $db->query('SELECT id FROM "' . $dbprefix . 'categories" WHERE extension = \\'com_content\\' ORDER BY id ASC LIMIT 1')->fetchColumn();
+          $catid = $catRow !== false ? (int) $catRow : 2;
+      }
+
+      $createdBy = 0;
+      $userRow = $db->query('SELECT id FROM "' . $dbprefix . 'users" ORDER BY id ASC LIMIT 1')->fetchColumn();
+      if ($userRow !== false) {
+          $createdBy = (int) $userRow;
+      }
+
+      $alias = $data['alias'];
+      if ($alias === null || $alias === '') {
+          $slug = strtolower(trim(preg_replace('/[^a-zA-Z0-9]+/', '-', $data['title']), '-'));
+          $alias = $slug !== '' ? $slug : ('article-' . time());
+      }
+
+      $baseAlias = $alias;
+      $suffix = 2;
+      $checkAlias = $db->prepare('SELECT COUNT(*) FROM "' . $dbprefix . 'content" WHERE alias = ? AND catid = ?');
+      while (true) {
+          $checkAlias->execute([$alias, $catid]);
+          if ((int) $checkAlias->fetchColumn() === 0) {
+              break;
+          }
+          $alias = $baseAlias . '-' . $suffix;
+          $suffix++;
+      }
+
+      $now = gmdate('Y-m-d H:i:s');
+      $stmt = $db->prepare(
+          'INSERT INTO "' . $dbprefix . 'content" ('
+          . 'asset_id, title, alias, introtext, "fulltext", state, catid, '
+          . 'created, created_by, created_by_alias, modified, modified_by, '
+          . 'publish_up, images, urls, attribs, version, ordering, '
+          . 'metakey, metadesc, access, hits, metadata, featured, language, note'
+          . ') VALUES ('
+          . '0, :title, :alias, :introtext, :fulltext, :state, :catid, '
+          . ':created, :created_by, \\'\\', :modified, :modified_by, '
+          . ':publish_up, \\'{}\\', \\'{}\\', \\'{}\\', 1, 0, '
+          . '\\'\\', \\'\\', :access, 0, \\'{}\\', :featured, :language, \\'\\''
+          . ')'
+      );
+      $stmt->execute([
+          ':title' => $data['title'],
+          ':alias' => $alias,
+          ':introtext' => $data['introtext'],
+          ':fulltext' => $data['fulltext'],
+          ':state' => (int) $data['state'],
+          ':catid' => (int) $catid,
+          ':created' => $now,
+          ':created_by' => $createdBy,
+          ':modified' => $now,
+          ':modified_by' => $createdBy,
+          ':publish_up' => $now,
+          ':access' => (int) $data['access'],
+          ':featured' => (int) $data['featured'],
+          ':language' => $data['language'],
+      ]);
+      $articleId = (int) $db->lastInsertId();
+
+      // Associate with default publishing workflow stage so article appears in Content -> Articles.
+      $wfTableExists = $db->query(
+          "SELECT name FROM sqlite_master WHERE type='table' AND name=" . $db->quote($dbprefix . 'workflow_associations')
+      )->fetchColumn();
+      if ($wfTableExists !== false) {
+          $wfStmt = $db->prepare(
+              'INSERT OR REPLACE INTO "' . $dbprefix . 'workflow_associations" (item_id, stage_id, extension) '
+              . 'VALUES (:item_id, 1, \\'com_content.article\\')'
+          );
+          $wfStmt->execute([':item_id' => $articleId]);
+      }
+
+      if ((int) $data['featured'] === 1) {
+          $fpTableExists = $db->query(
+              "SELECT name FROM sqlite_master WHERE type='table' AND name=" . $db->quote($dbprefix . 'content_frontpage')
+          )->fetchColumn();
+          if ($fpTableExists !== false) {
+              $fpStmt = $db->prepare(
+                  'INSERT OR REPLACE INTO "' . $dbprefix . 'content_frontpage" (content_id, ordering) VALUES (:content_id, 0)'
+              );
+              $fpStmt->execute([':content_id' => $articleId]);
+          }
+      }
+
+      if (is_array($data['fields']) && count($data['fields']) > 0) {
+          $findField = $db->prepare(
+              'SELECT id FROM "' . $dbprefix . 'fields" WHERE context = \\'com_content.article\\' AND name = :name LIMIT 1'
+          );
+          $insertField = $db->prepare(
+              'INSERT INTO "' . $dbprefix . 'fields" ('
+              . 'asset_id, context, group_id, title, name, label, default_value, type, note, description, '
+              . 'state, required, only_use_in_subform, ordering, params, fieldparams, language, '
+              . 'created_time, created_user_id, modified_time, modified_by, access'
+              . ') VALUES ('
+              . '0, \\'com_content.article\\', 0, :title, :name, :label, \\'\\', \\'text\\', \\'\\', \\'\\', '
+              . '1, 0, 0, 0, \\'{}\\', \\'{}\\', \\'*\\', :now, :uid, :now, :uid, 1'
+              . ')'
+          );
+          $insertValue = $db->prepare(
+              'INSERT INTO "' . $dbprefix . 'fields_values" (field_id, item_id, value) VALUES (:field_id, :item_id, :value)'
+          );
+
+          foreach ($data['fields'] as $fieldName => $fieldValue) {
+              $name = strtolower(trim(preg_replace('/[^a-zA-Z0-9_-]+/', '-', (string) $fieldName), '-'));
+              if ($name === '') {
+                  continue;
+              }
+              $findField->execute([':name' => $name]);
+              $fieldId = $findField->fetchColumn();
+              if ($fieldId === false) {
+                  $label = ucwords(str_replace(['-', '_'], ' ', $name));
+                  $insertField->execute([
+                      ':title' => $label,
+                      ':name' => $name,
+                      ':label' => $label,
+                      ':now' => $now,
+                      ':uid' => $createdBy,
+                  ]);
+                  $fieldId = (int) $db->lastInsertId();
+              } else {
+                  $fieldId = (int) $fieldId;
+              }
+              $insertValue->execute([
+                  ':field_id' => $fieldId,
+                  ':item_id' => (string) $articleId,
+                  ':value' => is_scalar($fieldValue) ? (string) $fieldValue : json_encode($fieldValue),
+              ]);
+          }
+      }
+      `
+    );
+  },
 };
 
 const blueprintStepSchemas = Object.freeze({
@@ -129,6 +326,11 @@ const blueprintStepSchemas = Object.freeze({
     requiredFields: ['sql'],
     optionalFields: [],
     description: 'Execute SQL statements against the Joomla SQLite database',
+  }),
+  createArticle: Object.freeze({
+    requiredFields: ['title'],
+    optionalFields: ['alias', 'introtext', 'content', 'fulltext', 'catid', 'state', 'featured', 'access', 'language', 'fields'],
+    description: 'Create a Joomla article with workflow_associations and optional com_fields values',
   }),
 });
 

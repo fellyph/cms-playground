@@ -35,11 +35,13 @@ describe('@cms-playground/drupal', () => {
     assert.ok(drupalAdapter.phpExtensions.includes('intl'));
   });
 
-  it('exposes and validates setAdminTheme and setFrontPage blueprint steps', async () => {
+  it('exposes and validates setAdminTheme, setFrontPage, and createNode blueprint steps', async () => {
     assert.equal(typeof drupalAdapter.blueprintSteps.setAdminTheme, 'function');
     assert.equal(typeof drupalAdapter.blueprintSteps.setFrontPage, 'function');
+    assert.equal(typeof drupalAdapter.blueprintSteps.createNode, 'function');
     assert.deepEqual(drupalAdapter.blueprintStepSchemas.setAdminTheme.requiredFields, ['theme']);
     assert.deepEqual(drupalAdapter.blueprintStepSchemas.setFrontPage.requiredFields, ['path']);
+    assert.deepEqual(drupalAdapter.blueprintStepSchemas.createNode.requiredFields, ['title']);
 
     await assert.rejects(
       () => drupalAdapter.blueprintSteps.setAdminTheme({ theme: '../evil' }, {}),
@@ -48,6 +50,14 @@ describe('@cms-playground/drupal', () => {
     await assert.rejects(
       () => drupalAdapter.blueprintSteps.setFrontPage({ path: 'node' }, {}),
       /Invalid Drupal front page path/
+    );
+    await assert.rejects(
+      () => drupalAdapter.blueprintSteps.createNode({ title: '' }, {}),
+      /non-empty "title"/
+    );
+    await assert.rejects(
+      () => drupalAdapter.blueprintSteps.createNode({ title: 'Hello', type: '../bad' }, {}),
+      /Invalid Drupal content type/
     );
   });
 

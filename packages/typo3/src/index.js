@@ -59,6 +59,33 @@ export function ensureTypo3Password(password) {
   return out;
 }
 
+function typo3DbSnippet(rootExpr) {
+  return `
+    $root = ${rootExpr};
+    $candidates = [
+        $root . '/typo3conf/system/settings.php',
+        $root . '/config/system/settings.php',
+    ];
+    $settingsFile = null;
+    foreach ($candidates as $candidate) {
+        if (file_exists($candidate)) {
+            $settingsFile = $candidate;
+            break;
+        }
+    }
+    if ($settingsFile === null) {
+        throw new RuntimeException('TYPO3 settings.php not found');
+    }
+    $settings = require $settingsFile;
+    $dbPath = is_array($settings) ? ($settings['DB']['Connections']['Default']['path'] ?? null) : null;
+    if (!is_string($dbPath) || $dbPath === '') {
+        throw new RuntimeException('TYPO3 SQLite database path not configured in settings.php');
+    }
+    $db = new PDO('sqlite:' . $dbPath);
+    $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+  `;
+}
+
 const blueprintSteps = {
   async setSiteName({ name }, context) {
     context.php.writeFile('/tmp/typo3-sitename.json', JSON.stringify({ name: String(name ?? '') }));
@@ -99,31 +126,237 @@ const blueprintSteps = {
       `
       $sql = file_get_contents('/tmp/typo3-step.sql');
       unlink('/tmp/typo3-step.sql');
-      $root = ${phpSingleQuote(context.documentRoot)};
-      $candidates = [
-          $root . '/typo3conf/system/settings.php',
-          $root . '/config/system/settings.php',
-      ];
-      $file = null;
-      foreach ($candidates as $candidate) {
-          if (file_exists($candidate)) {
-              $file = $candidate;
-              break;
-          }
-      }
-      if ($file === null) {
-          throw new RuntimeException('TYPO3 settings.php not found');
-      }
-      $settings = require $file;
-      $dbPath = $settings['DB']['Connections']['Default']['path'] ?? null;
-      if (!is_string($dbPath) || $dbPath === '') {
-          throw new RuntimeException('TYPO3 SQLite database path not configured in settings.php');
-      }
-      $db = new PDO('sqlite:' . $dbPath);
-      $db->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+      ${typo3DbSnippet(phpSingleQuote(context.documentRoot))}
       if (trim($sql) !== '') {
           $db->exec($sql);
       }
+      `
+    );
+  },
+
+  async createStarterSite(
+    { title = 'Home', siteName, header, bodytext, identifier = 'main' } = {},
+    context
+  ) {
+    const safeIdentifier = String(identifier || 'main').trim();
+    if (!/^[a-z0-9_-]+$/i.test(safeIdentifier)) {
+      throw new Error(`Invalid TYPO3 site identifier "${identifier}"`);
+    }
+
+    context.php.writeFile(
+      '/tmp/typo3-starter-site.json',
+      JSON.stringify({
+        title: String(title || 'Home'),
+        siteName: String(siteName ?? title ?? 'TYPO3 Playground'),
+        header: header != null ? String(header) : '',
+        bodytext: bodytext != null ? String(bodytext) : '',
+        identifier: safeIdentifier,
+        base: context.url ? String(context.url).replace(/\/?$/, '/') : '/',
+      })
+    );
+
+    await runPhpCode(
+      context.php,
+      `
+      $data = json_decode(file_get_contents('/tmp/typo3-starter-site.json'), true);
+      unlink('/tmp/typo3-starter-site.json');
+      ${typo3DbSnippet(phpSingleQuote(context.documentRoot))}
+
+      $now = time();
+      $rootPageId = $db->query('SELECT uid FROM pages WHERE is_siteroot = 1 AND deleted = 0 ORDER BY uid ASC LIMIT 1')->fetchColumn();
+      if ($rootPageId === false) {
+          $stmt = $db->prepare(
+              'INSERT INTO pages (pid, tstamp, crdate, deleted, hidden, doktype, title, slug, is_siteroot, sorting) '
+              . 'VALUES (0, :now, :now, 0, 0, 1, :title, :slug, 1, 256)'
+          );
+          $stmt->execute([
+              ':now' => $now,
+              ':title' => $data['title'],
+              ':slug' => '/',
+          ]);
+          $rootPageId = (int) $db->lastInsertId();
+      } else {
+          $rootPageId = (int) $rootPageId;
+          $stmt = $db->prepare('UPDATE pages SET title = :title, slug = :slug, hidden = 0, tstamp = :now WHERE uid = :uid');
+          $stmt->execute([
+              ':title' => $data['title'],
+              ':slug' => '/',
+              ':now' => $now,
+              ':uid' => $rootPageId,
+          ]);
+      }
+
+      $siteDir = $root . '/typo3conf/sites/' . $data['identifier'];
+      if (!is_dir($siteDir)) {
+          @mkdir($siteDir, 0777, true);
+      }
+      $siteConfigPath = $siteDir . '/config.yaml';
+      if (!is_file($siteConfigPath)) {
+          $escapedTitle = str_replace("'", "''", $data['siteName']);
+          $escapedBase = str_replace("'", "''", $data['base']);
+          $yaml = "base: '{$escapedBase}'\\n"
+              . "rootPageId: {$rootPageId}\\n"
+              . "websiteTitle: '{$escapedTitle}'\\n"
+              . "languages:\\n"
+              . "  - title: English\\n"
+              . "    enabled: true\\n"
+              . "    languageId: 0\\n"
+              . "    base: /\\n"
+              . "    locale: en_US.UTF-8\\n"
+              . "    navigationTitle: English\\n"
+              . "    flag: us\\n";
+          file_put_contents($siteConfigPath, $yaml);
+      }
+
+      $typoscript = "page = PAGE\\n"
+          . "page.10 = CONTENT\\n"
+          . "page.10 {\\n"
+          . "  table = tt_content\\n"
+          . "  select.orderBy = sorting\\n"
+          . "  select.where = colPos=0\\n"
+          . "  renderObj = COA\\n"
+          . "  renderObj {\\n"
+          . "    10 = TEXT\\n"
+          . "    10.field = header\\n"
+          . "    10.wrap = <h2>|</h2>\\n"
+          . "    10.required = 1\\n"
+          . "    20 = TEXT\\n"
+          . "    20.field = bodytext\\n"
+          . "    20.wrap = <div>|</div>\\n"
+          . "    20.required = 1\\n"
+          . "  }\\n"
+          . "}\\n";
+
+      $tplUid = $db->query('SELECT uid FROM sys_template WHERE pid = ' . $rootPageId . ' AND deleted = 0 ORDER BY uid ASC LIMIT 1')->fetchColumn();
+      if ($tplUid === false) {
+          $tplStmt = $db->prepare(
+              'INSERT INTO sys_template (pid, tstamp, crdate, deleted, hidden, title, root, clear, config) '
+              . 'VALUES (:pid, :now, :now, 0, 0, :title, 1, 3, :config)'
+          );
+          $tplStmt->execute([
+              ':pid' => $rootPageId,
+              ':now' => $now,
+              ':title' => 'Main TypoScript Template',
+              ':config' => $typoscript,
+          ]);
+      } else {
+          $tplStmt = $db->prepare('UPDATE sys_template SET config = :config, root = 1, clear = 3, hidden = 0, tstamp = :now WHERE uid = :uid');
+          $tplStmt->execute([
+              ':config' => $typoscript,
+              ':now' => $now,
+              ':uid' => (int) $tplUid,
+          ]);
+      }
+
+      if ($data['header'] !== '' || $data['bodytext'] !== '') {
+          $contentStmt = $db->prepare(
+              'INSERT INTO tt_content (pid, tstamp, crdate, deleted, hidden, sorting, colPos, CType, header, bodytext) '
+              . 'VALUES (:pid, :now, :now, 0, 0, 256, 0, :ctype, :header, :bodytext)'
+          );
+          $contentStmt->execute([
+              ':pid' => $rootPageId,
+              ':now' => $now,
+              ':ctype' => 'text',
+              ':header' => $data['header'],
+              ':bodytext' => $data['bodytext'],
+          ]);
+      }
+      `
+    );
+  },
+
+  async createPage({ title, pid, slug, doktype = 1, isSiteroot = false }, context) {
+    if (!title || typeof title !== 'string' || !title.trim()) {
+      throw new Error('TYPO3 createPage requires a non-empty "title"');
+    }
+
+    context.php.writeFile(
+      '/tmp/typo3-page.json',
+      JSON.stringify({
+        title: title.trim(),
+        pid: pid != null ? Number(pid) : (isSiteroot ? 0 : 1),
+        slug: typeof slug === 'string' && slug.trim() ? slug.trim() : null,
+        doktype: Number(doktype ?? 1),
+        isSiteroot: isSiteroot ? 1 : 0,
+      })
+    );
+
+    await runPhpCode(
+      context.php,
+      `
+      $data = json_decode(file_get_contents('/tmp/typo3-page.json'), true);
+      unlink('/tmp/typo3-page.json');
+      ${typo3DbSnippet(phpSingleQuote(context.documentRoot))}
+
+      $slug = $data['slug'];
+      if ($slug === null) {
+          if ($data['isSiteroot'] === 1) {
+              $slug = '/';
+          } else {
+              $part = strtolower(trim(preg_replace('/[^a-zA-Z0-9]+/', '-', $data['title']), '-'));
+              $slug = '/' . ($part !== '' ? $part : ('page-' . time()));
+          }
+      } elseif ($slug[0] !== '/') {
+          $slug = '/' . $slug;
+      }
+
+      $now = time();
+      $maxSort = (int) $db->query('SELECT COALESCE(MAX(sorting), 0) FROM pages WHERE pid = ' . (int) $data['pid'])->fetchColumn();
+      $stmt = $db->prepare(
+          'INSERT INTO pages (pid, tstamp, crdate, deleted, hidden, sorting, doktype, title, slug, is_siteroot) '
+          . 'VALUES (:pid, :now, :now, 0, 0, :sorting, :doktype, :title, :slug, :is_siteroot)'
+      );
+      $stmt->execute([
+          ':pid' => (int) $data['pid'],
+          ':now' => $now,
+          ':sorting' => $maxSort + 256,
+          ':doktype' => (int) $data['doktype'],
+          ':title' => $data['title'],
+          ':slug' => $slug,
+          ':is_siteroot' => (int) $data['isSiteroot'],
+      ]);
+      `
+    );
+  },
+
+  async createContent({ header, bodytext = '', pid = 1, ctype = 'text', colPos = 0 }, context) {
+    if ((!header || !String(header).trim()) && (!bodytext || !String(bodytext).trim())) {
+      throw new Error('TYPO3 createContent requires a non-empty "header" or "bodytext"');
+    }
+
+    context.php.writeFile(
+      '/tmp/typo3-content.json',
+      JSON.stringify({
+        header: String(header ?? ''),
+        bodytext: String(bodytext ?? ''),
+        pid: Number(pid ?? 1),
+        ctype: String(ctype || 'text'),
+        colPos: Number(colPos ?? 0),
+      })
+    );
+
+    await runPhpCode(
+      context.php,
+      `
+      $data = json_decode(file_get_contents('/tmp/typo3-content.json'), true);
+      unlink('/tmp/typo3-content.json');
+      ${typo3DbSnippet(phpSingleQuote(context.documentRoot))}
+
+      $now = time();
+      $maxSort = (int) $db->query('SELECT COALESCE(MAX(sorting), 0) FROM tt_content WHERE pid = ' . (int) $data['pid'])->fetchColumn();
+      $stmt = $db->prepare(
+          'INSERT INTO tt_content (pid, tstamp, crdate, deleted, hidden, sorting, colPos, CType, header, bodytext) '
+          . 'VALUES (:pid, :now, :now, 0, 0, :sorting, :colPos, :ctype, :header, :bodytext)'
+      );
+      $stmt->execute([
+          ':pid' => (int) $data['pid'],
+          ':now' => $now,
+          ':sorting' => $maxSort + 256,
+          ':colPos' => (int) $data['colPos'],
+          ':ctype' => $data['ctype'],
+          ':header' => $data['header'],
+          ':bodytext' => $data['bodytext'],
+      ]);
       `
     );
   },
@@ -145,6 +378,26 @@ export const typo3Adapter = {
       requiredFields: ['name'],
       optionalFields: [],
       description: 'Update the TYPO3 site name',
+    },
+    runSql: {
+      requiredFields: ['sql'],
+      optionalFields: [],
+      description: 'Execute SQL statements against the TYPO3 SQLite database',
+    },
+    createStarterSite: {
+      requiredFields: [],
+      optionalFields: ['title', 'siteName', 'header', 'bodytext', 'identifier'],
+      description: 'Seed a root page, site config.yaml, TypoScript template, and optional tt_content record so / renders',
+    },
+    createPage: {
+      requiredFields: ['title'],
+      optionalFields: ['pid', 'slug', 'doktype', 'isSiteroot'],
+      description: 'Insert a TYPO3 page record into the pages table',
+    },
+    createContent: {
+      requiredFields: ['header'],
+      optionalFields: ['bodytext', 'pid', 'ctype', 'colPos'],
+      description: 'Insert a TYPO3 content element into the tt_content table',
     },
   },
 

@@ -129,4 +129,44 @@ defined('_JEXEC') or die;
       tmp.cleanup();
     }
   });
+
+  it('seeds a published featured article via createArticle Blueprint step', async () => {
+    const tmp = createTempDir('e2e-joomla-article-');
+    try {
+      const bpPath = join(tmp.dir, 'blueprint.json');
+      writeFileSync(
+        bpPath,
+        JSON.stringify({
+          steps: [
+            {
+              step: 'createArticle',
+              title: 'Blueprint Seeded Article',
+              introtext: '<p>Hello from Joomla createArticle!</p>',
+              featured: true,
+              fields: { project_role: 'Lead' },
+            },
+          ],
+        })
+      );
+
+      const port = await getFreePort();
+      const server = await startCliServer(
+        ['--joomla', `--port=${port}`, `--blueprint=${bpPath}`],
+        { startupTimeoutMs: 180_000 }
+      );
+
+      try {
+        const homeRes = await fetch(`${server.url}/`);
+        assert.equal(homeRes.status, 200);
+        const homeHtml = await homeRes.text();
+        assert.match(homeHtml, /Blueprint Seeded Article/);
+        assert.match(homeHtml, /Hello from Joomla createArticle!/);
+      } finally {
+        const exit = await server.stop('SIGTERM');
+        assert.equal(exit.code, 0);
+      }
+    } finally {
+      tmp.cleanup();
+    }
+  });
 });

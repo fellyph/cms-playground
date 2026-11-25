@@ -68,14 +68,24 @@ describe('TYPO3 live E2E', () => {
     }
   });
 
-  it('applies a TYPO3 Blueprint (setSiteName) and serves the updated site name', async () => {
+  it('applies a TYPO3 Blueprint (setSiteName, createStarterSite, createContent, createPage) and renders /', async () => {
     const tmp = createTempDir('e2e-typo3-live-bp-');
     try {
       const bpPath = join(tmp.dir, 'blueprint.json');
       writeFileSync(
         bpPath,
         JSON.stringify({
-          steps: [{ step: 'setSiteName', name: 'TYPO3 E2E Blueprint Site' }],
+          steps: [
+            { step: 'setSiteName', name: 'TYPO3 E2E Blueprint Site' },
+            {
+              step: 'createStarterSite',
+              title: 'Home',
+              header: 'TYPO3 Starter Headline',
+              bodytext: 'Rendered from tt_content!',
+            },
+            { step: 'createPage', title: 'Projects' },
+            { step: 'createContent', header: 'Second Section', bodytext: 'More TYPO3 content.' },
+          ],
         })
       );
 
@@ -90,6 +100,13 @@ describe('TYPO3 live E2E', () => {
         assert.equal(loginRes.status, 200);
         const loginHtml = await loginRes.text();
         assert.match(loginHtml, /TYPO3 E2E Blueprint Site/);
+
+        const homeRes = await fetch(`${server.url}/`);
+        assert.equal(homeRes.status, 200);
+        const homeHtml = await homeRes.text();
+        assert.match(homeHtml, /TYPO3 Starter Headline/);
+        assert.match(homeHtml, /Rendered from tt_content!/);
+        assert.match(homeHtml, /Second Section/);
       } finally {
         const exit = await server.stop('SIGTERM');
         assert.equal(exit.code, 0);
