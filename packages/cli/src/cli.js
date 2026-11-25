@@ -32,6 +32,7 @@ import { kirbyAdapter } from '@cms-playground/kirby';
 import { typo3Adapter } from '@cms-playground/typo3';
 import { wordpressAdapter } from '@cms-playground/wordpress';
 import { initAgentsFile } from './agents-init.js';
+import { formatDocsText, loadDocsCatalog, queryDocs } from './docs.js';
 import { extractPhpErrors, fetchPlaygroundPage } from './fetch.js';
 import { buildCliMap, buildCliPaths } from './map.js';
 import { MCP_TOOLS, createMcpServer, runMcpServer } from './mcp.js';
@@ -44,7 +45,10 @@ export {
   createMcpServer,
   extractPhpErrors,
   fetchPlaygroundPage,
+  formatDocsText,
   initAgentsFile,
+  loadDocsCatalog,
+  queryDocs,
   runMcpServer,
 };
 
@@ -74,6 +78,7 @@ Usage:
   cms-playground agents init    [--cwd=<path>] [--dry-run] [--json]
   cms-playground cache          <path|ls|clear> [--joomla|--wp|...] [--json]
   cms-playground mcp            [--cwd=<path>]
+  cms-playground docs           [query...] [--all] [--json]
   cms-playground list
   cms-playground map            [--json | --paths]
 
@@ -87,6 +92,7 @@ Commands:
   agents init     Scaffold or update the @cms-playground block in AGENTS.md
   cache           Inspect or clear the local CMS bundle cache (path, ls, clear)
   mcp             Start a local stdio MCP server for coding agents
+  docs            Search bundled documentation offline (list, query, or print full topic)
   list            Show registered CMS adapters and supported PHP versions
   map             Output a machine-readable catalog of commands, adapters, and Blueprint steps
 
@@ -226,6 +232,8 @@ export function parseCliArgs(argv, { env = process.env, cwd = process.cwd() } = 
     cwd: resolvedCwd,
     json: agentMode,
     paths: false,
+    all: false,
+    query: [],
     agentMode,
     noColor: agentMode,
     mountsBeforeInstall: [],
@@ -425,6 +433,9 @@ export function parseCliArgs(argv, { env = process.env, cwd = process.cwd() } = 
           options.verifyStatus = code;
           break;
         }
+        case 'all':
+          options.all = true;
+          break;
         case 'verbosity': {
           const level = nextValue().toLowerCase();
           if (!VERBOSITY_LEVELS.includes(level)) {
@@ -455,6 +466,8 @@ export function parseCliArgs(argv, { env = process.env, cwd = process.cwd() } = 
 
     if (!command) {
       command = arg;
+    } else if (command === 'docs') {
+      options.query.push(arg);
     } else if ((command === 'setup' || command === 'agents' || command === 'cache' || command === 'fetch') && !subcommand) {
       subcommand = arg;
     } else {
@@ -541,10 +554,23 @@ export async function run(argv = process.argv.slice(2), { env = process.env, cwd
     if (options.json) {
       emitJson({
         help: HELP_TEXT,
-        commands: ['start', 'run-blueprint', 'build-snapshot', 'cli', 'fetch', 'setup agent', 'agents init', 'cache', 'mcp', 'list', 'map'],
+        commands: ['start', 'run-blueprint', 'build-snapshot', 'cli', 'fetch', 'setup agent', 'agents init', 'cache', 'mcp', 'docs', 'list', 'map'],
       });
     } else {
       console.log(HELP_TEXT);
+    }
+
+    return EXIT_CODES.OK;
+  }
+
+  if (command === 'docs') {
+    const catalog = loadDocsCatalog();
+    const result = queryDocs({ query: options.query, all: options.all }, catalog);
+
+    if (options.json) {
+      emitJson(result);
+    } else {
+      console.log(formatDocsText(result, catalog));
     }
 
     return EXIT_CODES.OK;

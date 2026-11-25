@@ -137,6 +137,15 @@ export function buildCliMap() {
       ],
     },
     {
+      id: 'docs',
+      usage: 'cms-playground docs [query...] [--all] [--json]',
+      description: 'Search bundled documentation offline (list topics, search query, or print full page)',
+      flags: [
+        { name: '--all', value: null, description: 'Return the full documentation catalog in one call' },
+        ...GLOBAL_FLAGS,
+      ],
+    },
+    {
       id: 'list',
       usage: 'cms-playground list [--json]',
       description: 'Show registered CMS adapters and supported PHP versions',
