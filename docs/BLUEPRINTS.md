@@ -208,3 +208,9 @@ npx @cms-playground/cli build-snapshot --joomla --blueprint=./blueprint.json --o
   ]
 }
 ```
+
+---
+
+## CMS-Specific Pitfalls & Admin Content Recipes
+
+For CMS-specific gotchas when seeding Admin-editable content (Joomla `#__workflow_associations` and `com_fields`, Drupal `page.front` and `EntityFormDisplay` widgets, TYPO3 randomized SQLite paths and password policy, WordPress `show_in_rest` post meta), see [CMS-Specific Pitfalls & Admin Content Recipes](../packages/cli/skills/cms-playground/references/blueprints.md#cms-specific-pitfalls--admin-content-recipes) in the bundled agent skill reference.
