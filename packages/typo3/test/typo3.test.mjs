@@ -102,6 +102,76 @@ describe('@cms-playground/typo3', () => {
     }
   });
 
+  it('seeds root page, site config, TypoScript, pages, and content via createStarterSite, createPage, and createContent', async () => {
+    const php = await bootPhp({ phpVersion: '8.4' });
+    try {
+      php.mkdir('/var/www/html/typo3conf/system');
+      php.writeFile(
+        '/var/www/html/typo3conf/system/settings.php',
+        "<?php\nreturn ['DB' => ['Connections' => ['Default' => ['driver' => 'pdo_sqlite', 'path' => '/var/www/html/typo3conf/cms-starter.sqlite']]]];\n"
+      );
+
+      await php.run({
+        code: `<?php
+          $db = new PDO('sqlite:/var/www/html/typo3conf/cms-starter.sqlite');
+          $db->exec("CREATE TABLE pages (uid INTEGER PRIMARY KEY AUTOINCREMENT, pid INTEGER, tstamp INTEGER, crdate INTEGER, deleted INTEGER, hidden INTEGER, sorting INTEGER, doktype INTEGER, title TEXT, slug TEXT, is_siteroot INTEGER)");
+          $db->exec("CREATE TABLE sys_template (uid INTEGER PRIMARY KEY AUTOINCREMENT, pid INTEGER, tstamp INTEGER, crdate INTEGER, deleted INTEGER, hidden INTEGER, title TEXT, root INTEGER, clear INTEGER, config TEXT)");
+          $db->exec("CREATE TABLE tt_content (uid INTEGER PRIMARY KEY AUTOINCREMENT, pid INTEGER, tstamp INTEGER, crdate INTEGER, deleted INTEGER, hidden INTEGER, sorting INTEGER, colPos INTEGER, CType TEXT, header TEXT, bodytext TEXT)");
+        `,
+      });
+
+      const ctx = { php, documentRoot: '/var/www/html', url: 'http://127.0.0.1:8790' };
+      await typo3Adapter.blueprintSteps.createStarterSite(
+        { title: 'Portfolio', header: 'Welcome', bodytext: 'Hello TYPO3!' },
+        ctx
+      );
+      await typo3Adapter.blueprintSteps.createPage({ title: 'About Us', pid: 1 }, ctx);
+      await typo3Adapter.blueprintSteps.createContent(
+        { header: 'Second Block', bodytext: 'More content', pid: 1 },
+        ctx
+      );
+
+      assert.equal(php.fileExists('/var/www/html/typo3conf/sites/main/config.yaml'), true);
+      const siteYaml = php.readFileAsText('/var/www/html/typo3conf/sites/main/config.yaml');
+      assert.match(siteYaml, /rootPageId:\s*1/);
+
+      const check = await php.run({
+        code: `<?php
+          $db = new PDO('sqlite:/var/www/html/typo3conf/cms-starter.sqlite');
+          echo json_encode([
+            'pages' => $db->query('SELECT uid, pid, title, slug, is_siteroot FROM pages ORDER BY uid')->fetchAll(PDO::FETCH_ASSOC),
+            'templates' => $db->query('SELECT pid, root FROM sys_template')->fetchAll(PDO::FETCH_ASSOC),
+            'content' => $db->query('SELECT pid, header, bodytext FROM tt_content ORDER BY uid')->fetchAll(PDO::FETCH_ASSOC),
+          ]);
+        `,
+      });
+      const data = JSON.parse(check.text);
+      assert.equal(data.pages.length, 2);
+      assert.equal(data.pages[0].title, 'Portfolio');
+      assert.equal(Number(data.pages[0].is_siteroot), 1);
+      assert.equal(data.pages[1].slug, '/about-us');
+      assert.equal(data.templates.length, 1);
+      assert.equal(data.content.length, 2);
+      assert.equal(data.content[0].header, 'Welcome');
+      assert.equal(data.content[1].header, 'Second Block');
+
+      await assert.rejects(
+        () => typo3Adapter.blueprintSteps.createStarterSite({ identifier: '../bad' }, ctx),
+        /Invalid TYPO3 site identifier/
+      );
+      await assert.rejects(
+        () => typo3Adapter.blueprintSteps.createPage({ title: '' }, ctx),
+        /non-empty "title"/
+      );
+      await assert.rejects(
+        () => typo3Adapter.blueprintSteps.createContent({ header: '', bodytext: '' }, ctx),
+        /non-empty "header" or "bodytext"/
+      );
+    } finally {
+      php.exit();
+    }
+  });
+
   it('activates auto-mounted TYPO3 extensions in PackageStates.php via postMount', async () => {
     const root = mkdtempSync(join(tmpdir(), 'cms-playground-typo3-pm-'));
     const php = await bootPhp({ phpVersion: '8.4' });

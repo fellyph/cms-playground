@@ -114,6 +114,108 @@ const blueprintSteps = {
       `
     );
   },
+
+  async createNode(
+    { title, type = 'page', body = '', status = 1, promote = 1, setFrontPage = false },
+    context
+  ) {
+    if (!title || typeof title !== 'string' || !title.trim()) {
+      throw new Error('Drupal createNode requires a non-empty "title"');
+    }
+    const bundle = String(type || 'page').trim();
+    if (!/^[a-z][a-z0-9_]*$/i.test(bundle)) {
+      throw new Error(`Invalid Drupal content type machine name "${type}"`);
+    }
+
+    context.php.writeFile(
+      '/tmp/drupal-node.json',
+      JSON.stringify({
+        title: title.trim(),
+        type: bundle,
+        body: String(body ?? ''),
+        status: status ? 1 : 0,
+        promote: promote ? 1 : 0,
+        setFrontPage: Boolean(setFrontPage),
+      })
+    );
+    await runPhpCode(
+      context.php,
+      `
+      $data = json_decode(file_get_contents('/tmp/drupal-node.json'), true);
+      unlink('/tmp/drupal-node.json');
+      ${drupalBootstrapSnippet(phpSingleQuote(context.documentRoot))}
+
+      $bundle = $data['type'];
+      $nodeType = \\Drupal\\node\\Entity\\NodeType::load($bundle);
+      if (!$nodeType) {
+          $label = ucwords(str_replace('_', ' ', $bundle));
+          $nodeType = \\Drupal\\node\\Entity\\NodeType::create([
+              'type' => $bundle,
+              'name' => $label,
+          ]);
+          $nodeType->save();
+      }
+
+      if (!\\Drupal::moduleHandler()->moduleExists('field')) {
+          \\Drupal::service('module_installer')->install(['field']);
+      }
+
+      $fieldStorage = \\Drupal\\field\\Entity\\FieldStorageConfig::loadByName('node', 'body');
+      if (!$fieldStorage) {
+          $fieldStorage = \\Drupal\\field\\Entity\\FieldStorageConfig::create([
+              'field_name' => 'body',
+              'entity_type' => 'node',
+              'type' => 'string_long',
+              'cardinality' => 1,
+          ]);
+          $fieldStorage->save();
+      }
+
+      $fieldConfig = \\Drupal\\field\\Entity\\FieldConfig::loadByName('node', $bundle, 'body');
+      if (!$fieldConfig) {
+          $fieldConfig = \\Drupal\\field\\Entity\\FieldConfig::create([
+              'field_storage' => $fieldStorage,
+              'bundle' => $bundle,
+              'label' => 'Body',
+          ]);
+          $fieldConfig->save();
+
+          $displayRepo = \\Drupal::service('entity_display.repository');
+          $formDisplay = $displayRepo->getFormDisplay('node', $bundle, 'default');
+          $formDisplay->setComponent('body', [
+              'type' => 'string_textarea',
+              'weight' => 10,
+          ])->save();
+
+          $viewDisplay = $displayRepo->getViewDisplay('node', $bundle, 'default');
+          $viewDisplay->setComponent('body', [
+              'type' => 'basic_string',
+              'label' => 'hidden',
+              'weight' => 10,
+          ])->save();
+      }
+
+      $values = [
+          'type' => $bundle,
+          'title' => $data['title'],
+          'uid' => 1,
+          'status' => (int) $data['status'],
+          'promote' => (int) $data['promote'],
+      ];
+      if ($data['body'] !== '') {
+          $values['body'] = ['value' => $data['body']];
+      }
+
+      $node = \\Drupal\\node\\Entity\\Node::create($values);
+      $node->save();
+
+      if (!empty($data['setFrontPage'])) {
+          \\Drupal::configFactory()->getEditable('system.site')->set('page.front', '/node/' . $node->id())->save();
+      }
+      drupal_flush_all_caches();
+      `
+    );
+  },
 };
 
 export const drupalAdapter = {
@@ -147,6 +249,11 @@ export const drupalAdapter = {
       requiredFields: ['path'],
       optionalFields: [],
       description: 'Set system.site page.front to a path starting with "/"',
+    },
+    createNode: {
+      requiredFields: ['title'],
+      optionalFields: ['type', 'body', 'status', 'promote', 'setFrontPage'],
+      description: 'Create a Drupal node entity (auto-creating the content type and body field if needed)',
     },
   },
 
